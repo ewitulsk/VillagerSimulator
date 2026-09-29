@@ -10,6 +10,7 @@ import com.ewitulsk.villagersimulator.api.sim.module.SimRegistrar;
 import com.ewitulsk.villagersimulator.content.VS;
 import com.ewitulsk.villagersimulator.content.buildings.BuildingsModule;
 import com.ewitulsk.villagersimulator.content.needs.NeedsModule;
+import com.ewitulsk.villagersimulator.content.villages.Appearance;
 import com.ewitulsk.villagersimulator.content.villages.Villager;
 import com.ewitulsk.villagersimulator.content.villages.VillagerCreated;
 import com.ewitulsk.villagersimulator.content.villages.Villages;
@@ -54,7 +55,7 @@ public final class PlansModule implements SimModule {
             double[] p = e.positionAt(now);
             Activity a = ctx.activity(e.activity());
             out.add(new Embodiment(v, id.name(), p[0], p[1], p[2], e.tx(), e.ty(), e.tz(), a.id(), a.label(),
-                    a.embodied(), CoreComponents.tier(ctx, v), CoreComponents.forced(ctx, v), id.seed()));
+                    a.embodied(), CoreComponents.tier(ctx, v), CoreComponents.forced(ctx, v), Appearance.genes(ctx, v)));
         });
         return List.copyOf(out);
     }

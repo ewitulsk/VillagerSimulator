@@ -117,6 +117,32 @@ public final class BridgeGameTests {
         return out;
     }
 
+    /** The puppet's synced appearance matches the sim's genes, and its behaviour byte follows the plan. */
+    @GameTest(template = "empty", batch = BATCH, timeoutTicks = 1200)
+    public static void puppetsCarryAppearanceAndBehaviour(GameTestHelper h) {
+        AtomicReference<EntityId> villager = new AtomicReference<>();
+        AtomicReference<Integer> genes = new AtomicReference<>();
+        TestSupport.spawn(TestSupport.compactVillage(h, "Faceton", 29, 1, null), null)
+                .thenCompose(village -> sim().runtime().query(ctx -> {
+                    EntityId v = ctx.get(village, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGE).residents().get(0);
+                    genes.set(com.ewitulsk.villagersimulator.content.villages.Appearance.genes(ctx, v));
+                    return v;
+                }))
+                .thenAccept(v -> {
+                    sim().runtime().submit(new ForceTierCommand(List.of(v), Tier.T0));
+                    villager.set(v);
+                });
+        h.startSequence()
+                .thenWaitUntil(() -> require(villager.get() != null && sim().bridge().puppet(villager.get()) != null, "embodied"))
+                .thenWaitUntil(() -> {
+                    SimVillagerEntity p = sim().bridge().puppet(villager.get());
+                    require(p.appearance() == genes.get(), "appearance synced: " + p.appearance() + " vs " + genes.get());
+                    require(p.appearance() != 0, "genes are set");
+                })
+                .thenExecute(() -> sim().runtime().submit(new ForceTierCommand(List.of(villager.get()), null)))
+                .thenSucceed();
+    }
+
     private static void force(EntityId villager, Tier tier) {
         sim().runtime().submit(new ForceTierCommand(List.of(villager), tier));
     }

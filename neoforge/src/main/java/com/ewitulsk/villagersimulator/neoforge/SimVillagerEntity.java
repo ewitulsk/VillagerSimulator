@@ -15,13 +15,38 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.animation.AnimatableManager;
+import software.bernie.geckolib.animation.AnimationController;
+import software.bernie.geckolib.animation.AnimationState;
+import software.bernie.geckolib.animation.PlayState;
+import software.bernie.geckolib.animation.RawAnimation;
+import software.bernie.geckolib.util.GeckoLibUtil;
 
 /**
  * A villager puppet: the T0 body of a sim villager (docs/ARCHITECTURE.md §12.4). It has no AI of its own; each tick
  * it follows the sim's embodiment (destination, behaviour, name). It is never saved: if it has no valid handle it
  * removes itself, so a crash can never leave duplicates behind.
  */
-public class SimVillagerEntity extends PathfinderMob {
+public class SimVillagerEntity extends PathfinderMob implements GeoEntity {
+    /** Packed appearance genes, painted into a texture on the client. */
+    public static final EntityDataAccessor<Integer> APPEARANCE = SynchedEntityData.defineId(SimVillagerEntity.class, EntityDataSerializers.INT);
+    /** What the villager is doing, for the animation controller ({@code BEHAVIOR_*}). */
+    public static final EntityDataAccessor<Byte> BEHAVIOR = SynchedEntityData.defineId(SimVillagerEntity.class, EntityDataSerializers.BYTE);
+    public static final byte BEHAVIOR_IDLE = 0, BEHAVIOR_WALK = 1, BEHAVIOR_WORK = 2, BEHAVIOR_SLEEP = 3, BEHAVIOR_EAT = 4, BEHAVIOR_TALK = 5;
+
+    private static final RawAnimation IDLE = RawAnimation.begin().thenLoop("animation.villager.idle");
+    private static final RawAnimation WALK = RawAnimation.begin().thenLoop("animation.villager.walk");
+    private static final RawAnimation WORK = RawAnimation.begin().thenLoop("animation.villager.work");
+    private static final RawAnimation EAT = RawAnimation.begin().thenLoop("animation.villager.eat");
+    private static final RawAnimation TALK = RawAnimation.begin().thenLoop("animation.villager.talk");
+    private static final RawAnimation SLEEP = RawAnimation.begin().thenLoop("animation.villager.sleep");
+
+    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
     private static final double SPEED = 0.6;
     /** Farther than this from the plan position, the puppet snaps back (e.g. it got stuck). */
     private static final double MAX_DRIFT = 12;
@@ -40,6 +65,44 @@ public class SimVillagerEntity extends PathfinderMob {
                 .add(Attributes.MAX_HEALTH, 20)
                 .add(Attributes.MOVEMENT_SPEED, 0.5)
                 .add(Attributes.FOLLOW_RANGE, 48);
+    }
+
+    @Override
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        super.defineSynchedData(builder);
+        builder.define(APPEARANCE, 0);
+        builder.define(BEHAVIOR, BEHAVIOR_IDLE);
+    }
+
+    public int appearance() {
+        return entityData.get(APPEARANCE);
+    }
+
+    public byte behavior() {
+        return entityData.get(BEHAVIOR);
+    }
+
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        controllers.add(new AnimationController<>(this, "main", 4, this::animate));
+    }
+
+    /** Animation state driven by the embodied behaviour the sim sends (docs/ARCHITECTURE.md §16). */
+    private PlayState animate(AnimationState<SimVillagerEntity> state) {
+        byte b = behavior();
+        if (isSleeping() || b == BEHAVIOR_SLEEP) return state.setAndContinue(SLEEP);
+        if (state.isMoving()) return state.setAndContinue(WALK);
+        return state.setAndContinue(switch (b) {
+            case BEHAVIOR_WORK -> WORK;
+            case BEHAVIOR_EAT -> EAT;
+            case BEHAVIOR_TALK -> TALK;
+            default -> IDLE;
+        });
+    }
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return geoCache;
     }
 
     /** Sets the sim entity this puppet embodies. */
@@ -81,6 +144,14 @@ public class SimVillagerEntity extends PathfinderMob {
         }
 
         boolean sleep = EmbodiedBehaviors.SLEEP.equals(e.behavior());
+        if (appearance() != (int) e.appearance()) entityData.set(APPEARANCE, (int) e.appearance());
+        byte behavior = partner != null ? BEHAVIOR_TALK
+                : sleep ? BEHAVIOR_SLEEP
+                : EmbodiedBehaviors.WORK.equals(e.behavior()) ? BEHAVIOR_WORK
+                : EmbodiedBehaviors.EAT.equals(e.behavior()) ? BEHAVIOR_EAT
+                : EmbodiedBehaviors.WALK.equals(e.behavior()) ? BEHAVIOR_WALK
+                : BEHAVIOR_IDLE;
+        if (behavior() != behavior) entityData.set(BEHAVIOR, behavior);
         BlockPos target = BlockPos.containing(e.tx(), e.ty(), e.tz());
         if (isSleeping()) {
             if (sleep && target.equals(getSleepingPos().orElse(null))) return;

@@ -13,7 +13,7 @@ import java.util.List;
  * @param x,y,z       plan position at the view's time
  * @param tx,ty,tz    current destination
  * @param behavior    embodied behaviour key (see {@code EmbodiedBehaviors})
- * @param appearance  seed for appearance variation
+ * @param appearance  appearance data for the client (for villagers: packed genes)
  */
 public record Embodiment(EntityId id, String name, double x, double y, double z, double tx, double ty, double tz,
                          Id activity, String activityLabel, Id behavior, Tier tier, boolean forced, long appearance) {

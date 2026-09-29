@@ -34,6 +34,13 @@ neoForge {
             client()
             gameDirectory = file(prop('vsClientRunDir').getOrElse('runs/client'))
         }
+        // Scripted client for visual checks (../ModTesting.md): -PvsClientScript=look
+        clientScript {
+            client()
+            gameDirectory = file(prop('vsClientScriptDir').getOrElse('runs/clientscript'))
+            systemProperty 'villagersimulator.clientScript', prop('vsClientScript').getOrElse('look')
+            systemProperty 'villagersimulator.hiddenClient', prop('vsHiddenClient').getOrElse('true')
+        }
         server {
             server()
             gameDirectory = file(prop('vsServerRunDir').getOrElse('runs/server'))
@@ -73,8 +80,18 @@ if (prop('vs_hotswap').getOrElse('false') == 'true') {
     }
 }
 
+repositories {
+    maven {
+        name = 'GeckoLib'
+        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content { includeGroup('software.bernie.geckolib') }
+    }
+}
+
 dependencies {
     simProjects.each { implementation project(it) }
+    // Villager models and animations (docs/ARCHITECTURE.md A18). A required mod dependency, not bundled.
+    implementation "software.bernie.geckolib:geckolib-neoforge-1.21.1:${geckolib_version}"
     // SQLite is not shipped by Minecraft, so it is jar-in-jar'd (docs/ARCHITECTURE.md §17).
     jarJar(implementation("org.xerial:sqlite-jdbc")) {
         version {

@@ -4,7 +4,7 @@ A NeoForge 1.21.1 mod: a village simulation engine aiming at a million villagers
 
 - [docs/DESIGN.md](docs/DESIGN.md): what the game is
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it's built
-- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village).**
+- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village), Phase 4 (Villagers With a Face).**
 
 ## Project layout
 
@@ -66,9 +66,15 @@ In a creative overworld (cheats on):
 
 **You're part of it too.** Right-click a villager to talk: chat, compliment, joke, ask about their day, or invite them to the tavern (once they know you). Use an item on a villager to give it as a gift; what it's worth depends on the item (`gift_values` data) and the villager's taste. Spending time in the tavern or at the well with villagers builds relationships the same way it does between villagers, and villagers gossip about you, so your reputation spreads to people you've never met. `/vs reputation` shows where you stand.
 
+**Every villager looks different.** Villagers are GeckoLib models (`tools/models/villager.py`) with idle, walk, work, eat, talk and sleep animations driven by what the sim says they're doing. Their look comes from appearance genes in the sim (skin, hair colour and style, outfit, eyes), painted into a texture on the client.
+
+![A villager washing at the well](docs/images/phase4-well.png)
+
 Walk more than 48 blocks away and the villagers become abstract (T2) while their days carry on. Come back and they're where their schedule says. The sim is saved in `<world>/villagersimulator/sim.db`.
 
 **Config** (`config/villagersimulator-common.toml`): `sim.debugTimeScale` speeds up sim time for playtesting; `tiers.t0Radius` sets the embodiment distance.
+
+**Visual check:** `./gradlew :neoforge:runClientScript` runs a scripted client (window off-screen) that builds a hamlet, takes screenshots into `neoforge/runs/clientscript/screenshots/` and quits.
 
 **Hot-swap in dev:** `./gradlew :neoforge:runClient -Pvs_hotswap=true` runs on a JetBrains Runtime with enhanced class redefinition.
 

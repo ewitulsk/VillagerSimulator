@@ -79,6 +79,7 @@ public record SpawnVillageCommand(String name, long seed, int centerX, int cente
             ctx.add(v, CoreComponents.TIER);
             ctx.set(v, CoreComponents.TIER_CURRENT, Tier.T2.ordinal());
             Needs.init(ctx, v, vSeed);
+            Appearance.init(ctx, v, vSeed);
             residents.add(v);
         }
 

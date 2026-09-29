@@ -29,6 +29,7 @@ public final class VillagesModule implements SimModule {
     public void register(SimRegistrar r) {
         r.component(Villages.VILLAGE);
         r.component(Villages.VILLAGER);
+        r.component(Appearance.COMPONENT);
         // True when the venue is the actor's home / workplace.
         r.function(ExpressionFunction.bool("is_home", List.of(), (env, a) -> {
             Villager v = env.actor().isNone() ? null : env.sim().get(env.actor(), Villages.VILLAGER);

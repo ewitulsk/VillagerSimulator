@@ -91,3 +91,10 @@ A village simulation engine: living villages that keep going when you walk away.
 # stop your mod loading on the server for example.
 #[features.${mod_id}]
 #openGLVersion="[3.2,)"
+
+[[dependencies.${mod_id}]]
+    modId="geckolib"
+    type="required"
+    versionRange="[4.8,5)"
+    ordering="NONE"
+    side="BOTH"

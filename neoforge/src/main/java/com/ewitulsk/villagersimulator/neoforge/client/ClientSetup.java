@@ -9,6 +9,7 @@ public final class ClientSetup {
     private ClientSetup() {}
 
     public static void init(IEventBus modBus) {
+        com.ewitulsk.villagersimulator.neoforge.client.script.ClientScript.init();
         modBus.addListener(EntityRenderersEvent.RegisterRenderers.class,
                 e -> e.registerEntityRenderer(ModContent.VILLAGER.get(), SimVillagerRenderer::new));
     }
