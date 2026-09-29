@@ -918,6 +918,8 @@ Server config (initial list):
 
 ## 23. Roadmap
 
+> Superseded by the detailed, phase-by-phase [ROADMAP.md](ROADMAP.md). The table below is the original high-level outline.
+
 | Phase | Scope | Exit criteria |
 |---|---|---|
 | **1. Vertical slice (in Minecraft)** | Sim core + expression language + base modules (lifecycle, needs, plans, buildings, social), bridge with tier manager and puppet entities, one ~30-villager village (house, bakery and tavern blueprints built with Structure Lab), debug tools, KubeJS skeleton; headless benchmark on the same code | Walk through a mixed-tier village with no teleporting or state loss; benchmark trending toward 1M (see [ARCHITECTURE.md §21](ARCHITECTURE.md#21-phase-1-plan-vertical-slice)) |

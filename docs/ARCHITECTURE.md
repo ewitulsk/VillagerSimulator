@@ -662,6 +662,8 @@ Implementation details to be tuned from benchmarks rather than decided up front:
 
 ## 21. Phase 1 Plan: Vertical Slice
 
+> Superseded by [ROADMAP.md](ROADMAP.md) (this vertical slice is spread across Phases 0–7 there). Kept for reference.
+
 Goal: a small, living village **in Minecraft**, running on the real engine, with the headless benchmark growing alongside.
 
 1. **Project restructure:** multi-project Gradle build per [§4](#4-project-layout); dependency-rule check.
