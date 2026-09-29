@@ -63,3 +63,7 @@ Walk more than 48 blocks away and the villagers become abstract (T2) while their
 **Config** (`config/villagersimulator-common.toml`): `sim.debugTimeScale` speeds up sim time for playtesting; `tiers.t0Radius` sets the embodiment distance.
 
 **Hot-swap in dev:** `./gradlew :neoforge:runClient -Pvs_hotswap=true` runs on a JetBrains Runtime with enhanced class redefinition.
+
+## License
+
+[MIT](LICENSE).
