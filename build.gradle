@@ -1,3 +1,8 @@
+plugins {
+    // Declared once here so every Minecraft-side project (mod-api, neoforge, compat, examples) shares it.
+    id 'net.neoforged.moddev' version '2.0.147' apply false
+}
+
 // Root build: shared configuration for the Minecraft-free simulation projects, and the dependency-rule check
 // from docs/ARCHITECTURE.md §4.
 
@@ -13,6 +18,7 @@ ext {
     slf4jVersion = '2.0.9'
     sqliteVersion = '3.46.1.3'
     junitVersion = '5.11.4'
+    annotationsVersion = '24.1.0'
 }
 
 def simProjects = ['sim-api', 'sim-core', 'sim-content', 'sim-harness', 'sim-bench']
@@ -42,6 +48,11 @@ subprojects {
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
     }
+    // Javadoc for the public APIs: real errors fail the build; missing comments on record parts don't.
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+        options.addStringOption('Xdoclint:all,-missing', '-quiet')
+    }
 }
 
 // Which projects each project may depend on (main code only; tests may use more).
@@ -51,7 +62,11 @@ def allowedDependencies = [
         'sim-content': [':sim-api'],
         'sim-harness': [':sim-api', ':sim-core', ':sim-content'],
         'sim-bench'  : [':sim-api', ':sim-core', ':sim-content', ':sim-harness'],
-        'neoforge'   : [':sim-api', ':sim-core', ':sim-content'],
+        'mod-api'    : [':sim-api'],
+        'neoforge'   : [':sim-api', ':sim-core', ':sim-content', ':sim-harness', ':mod-api', ':compat:kubejs'],
+        'kubejs'     : [':sim-api', ':mod-api'],
+        // The reference addon may only use the public APIs (docs/ARCHITECTURE.md �11).
+        'fountain'   : [':sim-api', ':mod-api'],
 ]
 
 // Collected at configuration time so the task stays configuration-cache friendly.
@@ -78,4 +93,49 @@ tasks.register('checkDependencyRules') {
         }
         logger.lifecycle('Dependency rules OK')
     }
+}
+
+// ---------------------------------------------------------------------------------------------- API compatibility
+// The public APIs (sim-api, mod-api) are compared with the committed baseline in api/baseline/ (docs/ARCHITECTURE.md
+// §11). A binary- or source-incompatible change fails `apiCompatibility` unless it's announced by updating the
+// baseline in the same change: `./gradlew updateApiBaseline`. Types marked @ApiStatus.Internal are exempt.
+repositories { mavenCentral() }
+configurations { japicmp }
+dependencies { japicmp('com.github.siom79.japicmp:japicmp:0.26.2:jar-with-dependencies') { transitive = false } }
+
+def publicApis = ['sim-api', 'mod-api']
+def apiJar = { String name -> file("${name}/build/libs/${name}-${mod_version}.jar") }
+def apiCheckTasks = publicApis.collect { name ->
+    tasks.register("apiCompatibility-${name}", JavaExec) {
+        group = 'verification'
+        description = "Checks ${name} against api/baseline/${name}.jar with japicmp."
+        dependsOn ":${name}:jar"
+        classpath = configurations.japicmp
+        mainClass = 'japicmp.JApiCmp'
+        def baseline = file("api/baseline/${name}.jar")
+        def current = apiJar(name)
+        def report = layout.buildDirectory.file("reports/japicmp/${name}.html")
+        inputs.file(baseline)
+        inputs.file(current)
+        outputs.file(report)
+        argumentProviders.add({ ['--old', baseline.path, '--new', current.path,
+                                 '--only-incompatible', '--ignore-missing-classes',
+                                 '--error-on-binary-incompatibility', '--error-on-source-incompatibility',
+                                 '--exclude', '@org.jetbrains.annotations.ApiStatus$Internal',
+                                 '--html-file', report.get().asFile.path] } as CommandLineArgumentProvider)
+    }
+}
+tasks.register('apiCompatibility') {
+    group = 'verification'
+    description = 'Fails on unannounced breaking changes to the public APIs (japicmp against api/baseline/).'
+    dependsOn apiCheckTasks
+}
+tasks.register('updateApiBaseline', Copy) {
+    group = 'verification'
+    description = 'Announces the current public APIs as the new baseline (commit api/baseline/ with the change).'
+    publicApis.each { name ->
+        dependsOn ":${name}:jar"
+        from(apiJar(name)) { rename { "${name}.jar" } }
+    }
+    into 'api/baseline'
 }

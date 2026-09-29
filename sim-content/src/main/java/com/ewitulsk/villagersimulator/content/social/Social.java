@@ -182,7 +182,7 @@ public final class Social {
         float f = rel.friendship(a, b);
         if (f >= FRIEND_AT && !rel.hasBond(a, b, Bonds.FRIEND)) {
             rel.setBond(a, b, Bonds.FRIEND, true);
-            long record = ctx.events().record(EVENT_FRIENDS, a, 0, List.of(b), "Became friends");
+            long record = ctx.events().record(EVENT_FRIENDS, a, 0, List.of(b), nameOf(ctx, a) + " and " + nameOf(ctx, b) + " became friends");
             Memories.add(ctx, a, MEM_FRIEND, record, b, 8, SimTime.days(2));
             Memories.add(ctx, b, MEM_FRIEND, record, a, 8, SimTime.days(2));
         } else if (f < UNFRIEND_BELOW && rel.hasBond(a, b, Bonds.FRIEND)) {
@@ -190,7 +190,7 @@ public final class Social {
         }
         if (f <= RIVAL_AT && !rel.hasBond(a, b, Bonds.RIVAL)) {
             rel.setBond(a, b, Bonds.RIVAL, true);
-            long record = ctx.events().record(EVENT_RIVALS, a, 0, List.of(b), "Became rivals");
+            long record = ctx.events().record(EVENT_RIVALS, a, 0, List.of(b), nameOf(ctx, a) + " and " + nameOf(ctx, b) + " became rivals");
             Memories.add(ctx, a, MEM_RIVAL, record, b, -8, SimTime.days(2));
             Memories.add(ctx, b, MEM_RIVAL, record, a, -8, SimTime.days(2));
         } else if (f > UNRIVAL_ABOVE && rel.hasBond(a, b, Bonds.RIVAL)) {
@@ -220,5 +220,11 @@ public final class Social {
             }
         }
         return Map.copyOf(out);
+    }
+
+    /** A villager's name for event details; anyone else (e.g. a player) is "someone". */
+    static String nameOf(SimContext ctx, EntityId e) {
+        var v = ctx.get(e, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGER);
+        return v != null ? v.name() : "someone";
     }
 }

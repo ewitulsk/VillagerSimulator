@@ -26,10 +26,34 @@ import java.util.Optional;
  * @param services     what visitors can do here: {@code eat}, {@code gather}
  * @param initialStock goods the building starts with
  * @param advertisements what the building offers visitors ({@link Advertisement})
+ * @param layout       optional: generated villages include this building type on their own ({@link Layout})
  */
 public record BuildingType(Id blueprint, List<Integer> size, Map<String, List<List<Integer>>> points,
                            Optional<Job> job, List<String> services, Map<String, Integer> initialStock,
-                           List<Advertisement> advertisements) {
+                           List<Advertisement> advertisements, Optional<Layout> layout) {
+
+    public BuildingType(Id blueprint, List<Integer> size, Map<String, List<List<Integer>>> points, Optional<Job> job,
+                        List<String> services, Map<String, Integer> initialStock, List<Advertisement> advertisements) {
+        this(blueprint, size, points, job, services, initialStock, advertisements, Optional.empty());
+    }
+
+    /**
+     * How generated villages include a building type that the base layouts don't know about, e.g. an addon's
+     * fountain: one per {@code perVillagers} villagers (at least one), in the district with purpose
+     * {@code district} ({@code market} or {@code residential}).
+     *
+     * <pre>{@code "layout": { "per_villagers": 16, "district": "market" }}</pre>
+     */
+    public record Layout(int perVillagers, String district) {
+        public static final Codec<Layout> CODEC = RecordCodecBuilder.create(i -> i.group(
+                Codec.intRange(1, 10_000).fieldOf("per_villagers").forGetter(Layout::perVillagers),
+                Codec.STRING.optionalFieldOf("district", "market").forGetter(Layout::district)
+        ).apply(i, Layout::new));
+
+        public int count(int villagers) {
+            return Math.max(1, (villagers + perVillagers - 1) / perVillagers);
+        }
+    }
 
     /** A job at this building: {@code slots} workers doing {@code activity}. */
     public record Job(Id id, int slots, Id activity) {
@@ -47,7 +71,8 @@ public record BuildingType(Id blueprint, List<Integer> size, Map<String, List<Li
             Job.CODEC.optionalFieldOf("job").forGetter(BuildingType::job),
             Codec.STRING.listOf().optionalFieldOf("services", List.of()).forGetter(BuildingType::services),
             Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("initial_stock", Map.of()).forGetter(BuildingType::initialStock),
-            Advertisement.CODEC.listOf().optionalFieldOf("advertisements", List.of()).forGetter(BuildingType::advertisements)
+            Advertisement.CODEC.listOf().optionalFieldOf("advertisements", List.of()).forGetter(BuildingType::advertisements),
+            Layout.CODEC.optionalFieldOf("layout").forGetter(BuildingType::layout)
     ).apply(i, BuildingType::new));
 
     public static final RegistryKey<BuildingType> REGISTRY = new RegistryKey<>(VS.id("building_type"), "building_types", CODEC);

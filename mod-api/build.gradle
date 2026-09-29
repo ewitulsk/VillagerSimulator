@@ -1,0 +1,34 @@
+// PUBLIC Minecraft-side API (docs/ARCHITECTURE.md §11): what addons use besides sim-api. Packed into the mod jar.
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+    version = project.neo_version
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+}
+
+dependencies {
+    api project(':sim-api')
+    compileOnlyApi "org.jetbrains:annotations:${annotationsVersion}"
+}
+
+// Publishable (docs/ARCHITECTURE.md §11, A23: not hosted yet). Addons can build against it with publishToMavenLocal.
+apply plugin: 'maven-publish'
+java {
+    withSourcesJar()
+}
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifactId = 'villagersimulator-mod-api'
+            from components.java
+        }
+    }
+}

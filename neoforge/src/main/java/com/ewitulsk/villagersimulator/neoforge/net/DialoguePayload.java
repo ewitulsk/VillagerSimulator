@@ -9,9 +9,13 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Server → client: open or update the dialogue screen with a villager (entity {@code entityId}). */
+/**
+ * Server → client: open or update the dialogue screen with a villager (entity {@code entityId}).
+ *
+ * @param facts addons' facts about the villager for their dialogue panels (mod-api {@code VillagerFact})
+ */
 public record DialoguePayload(int entityId, String name, String header, String greeting, List<Dialogue.Option> options,
-                              String response) implements CustomPacketPayload {
+                              String response, java.util.Map<String, String> facts) implements CustomPacketPayload {
     public static final Type<DialoguePayload> TYPE = new Type<>(VillagerSimulatorMod.id("dialogue"));
     public static final StreamCodec<RegistryFriendlyByteBuf, DialoguePayload> CODEC = StreamCodec.of(
             (buf, p) -> {
@@ -27,6 +31,11 @@ public record DialoguePayload(int entityId, String name, String header, String g
                     buf.writeUtf(o.reason());
                 }
                 buf.writeUtf(p.response);
+                buf.writeVarInt(p.facts.size());
+                p.facts.forEach((k, v) -> {
+                    buf.writeUtf(k);
+                    buf.writeUtf(v);
+                });
             },
             buf -> {
                 int entityId = buf.readVarInt();
@@ -34,11 +43,16 @@ public record DialoguePayload(int entityId, String name, String header, String g
                 int n = buf.readVarInt();
                 List<Dialogue.Option> options = new ArrayList<>(n);
                 for (int i = 0; i < n; i++) options.add(new Dialogue.Option(buf.readUtf(), buf.readUtf(), buf.readBoolean(), buf.readUtf()));
-                return new DialoguePayload(entityId, name, header, greeting, List.copyOf(options), buf.readUtf());
+                String response = buf.readUtf();
+                int f = buf.readVarInt();
+                java.util.Map<String, String> facts = new java.util.LinkedHashMap<>();
+                for (int i = 0; i < f; i++) facts.put(buf.readUtf(), buf.readUtf());
+                return new DialoguePayload(entityId, name, header, greeting, List.copyOf(options), response, facts);
             });
 
-    public static DialoguePayload of(int entityId, Dialogue.View view) {
-        return new DialoguePayload(entityId, view.name(), view.header(), view.greeting(), view.options(), view.response());
+    public static DialoguePayload of(int entityId, Dialogue.View view, java.util.Map<String, String> facts) {
+        return new DialoguePayload(entityId, view.name(), view.header(), view.greeting(), view.options(), view.response(),
+                java.util.Map.copyOf(facts));
     }
 
     @Override

@@ -30,8 +30,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * assertTrue(s.stock(v, "bakery", "bread") > 0);
  * }</pre>
  */
-public final class Scenario {
+public final class Scenario implements com.ewitulsk.villagersimulator.api.sim.scenario.SimScenario {
     private final SimWorld world;
+    private final List<Check> checks = new java.util.ArrayList<>();
 
     private Scenario(SimWorld world) {
         this.world = world;
@@ -52,11 +53,17 @@ public final class Scenario {
                 .startTime(startTime).threads(threads).build());
     }
 
+    /** A scenario over an existing fresh world, e.g. one built from the running server's modules and data. */
+    public static Scenario of(SimWorld world) {
+        return new Scenario(world);
+    }
+
     public static SimWorld world(List<SimModule> modules, DataSource data, long startTime) {
         return SimWorld.builder().modules(modules).data(data).startTime(startTime).build();
     }
 
     /** Spawns the two-district town layout centred at {@code (x, 64, z)} and returns the village. */
+    @Override
     public EntityId spawnTown(String name, long seed, int villagers, int x, int z) {
         var layout = VillageLayouts.town(world.registry(BuildingType.REGISTRY), x, 64, z, villagers);
         return spawn(new SpawnVillageCommand(name, seed, x, 64, z, layout.placements(), layout.districts(), villagers, null));
@@ -66,11 +73,44 @@ public final class Scenario {
         return world;
     }
 
+    @Override
+    public SimWorld sim() {
+        return world;
+    }
+
+    @Override
+    public Scenario warp(String duration) {
+        return warp(com.ewitulsk.villagersimulator.api.sim.SimTime.parseDuration(duration));
+    }
+
+    @Override
+    public List<EntityId> residents(EntityId village) {
+        return village(village).residents();
+    }
+
+    @Override
+    public int events(String type) {
+        return events(Id.parse(type));
+    }
+
+    @Override
+    public Scenario expect(String description, boolean passed) {
+        checks.add(new Check(description, passed));
+        return this;
+    }
+
+    @Override
+    public List<Check> checks() {
+        return List.copyOf(checks);
+    }
+
+    @Override
     public long now() {
         return world.now();
     }
 
     /** Spawns the standard Phase 0 hamlet centred at the origin and returns the village. */
+    @Override
     public EntityId spawnHamlet(String name, long seed, int villagers) {
         var types = world.registry(BuildingType.REGISTRY);
         return spawn(hamletCommand(types, name, seed, villagers, 0, 64, 0, null));
@@ -97,6 +137,7 @@ public final class Scenario {
         return this;
     }
 
+    @Override
     public Scenario warp(long ticks) {
         world.advanceTo(world.now() + ticks);
         return this;

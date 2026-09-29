@@ -1,0 +1,27 @@
+// Reference addon (docs/ROADMAP.md Phase 7): a fountain building with its own advertisement, Activity, expression
+// function, embodied behaviour, animation key, point block and dialogue panel. Built only against the public APIs:
+// sim-api and mod-api (the dependency-rule check enforces it). In dev it runs alongside the mod.
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+base {
+    archivesName = 'villagersimulator_fountain'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+    version = project.neo_version
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+}
+
+dependencies {
+    // Provided at runtime by Villager Simulator.
+    compileOnly project(':sim-api')
+    compileOnly project(':mod-api')
+}

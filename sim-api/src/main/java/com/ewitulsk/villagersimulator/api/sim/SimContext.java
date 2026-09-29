@@ -1,5 +1,7 @@
 package com.ewitulsk.villagersimulator.api.sim;
 
+import org.jetbrains.annotations.ApiStatus;
+
 import com.ewitulsk.villagersimulator.api.sim.activity.Activity;
 import com.ewitulsk.villagersimulator.api.sim.component.DenseComponent;
 import com.ewitulsk.villagersimulator.api.sim.component.FloatField;
@@ -44,11 +46,14 @@ public interface SimContext {
     // --- shards ---
 
     /** Creates a new shard (commands only). */
+    @ApiStatus.Internal
     int newShard();
 
     /** Moves an entity (and its pending tasks) to a shard (commands only). */
+    @ApiStatus.Internal
     void setShard(EntityId entity, int shard);
 
+    @ApiStatus.Internal
     int shardOf(EntityId entity);
 
     // --- dense components ---

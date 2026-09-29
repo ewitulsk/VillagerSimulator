@@ -36,15 +36,9 @@ public class SimVillagerEntity extends PathfinderMob implements GeoEntity {
     /** Packed appearance genes, painted into a texture on the client. */
     public static final EntityDataAccessor<Integer> APPEARANCE = SynchedEntityData.defineId(SimVillagerEntity.class, EntityDataSerializers.INT);
     /** What the villager is doing, for the animation controller ({@code BEHAVIOR_*}). */
-    public static final EntityDataAccessor<Byte> BEHAVIOR = SynchedEntityData.defineId(SimVillagerEntity.class, EntityDataSerializers.BYTE);
-    public static final byte BEHAVIOR_IDLE = 0, BEHAVIOR_WALK = 1, BEHAVIOR_WORK = 2, BEHAVIOR_SLEEP = 3, BEHAVIOR_EAT = 4, BEHAVIOR_TALK = 5;
-
-    private static final RawAnimation IDLE = RawAnimation.begin().thenLoop("animation.villager.idle");
-    private static final RawAnimation WALK = RawAnimation.begin().thenLoop("animation.villager.walk");
-    private static final RawAnimation WORK = RawAnimation.begin().thenLoop("animation.villager.work");
-    private static final RawAnimation EAT = RawAnimation.begin().thenLoop("animation.villager.eat");
-    private static final RawAnimation TALK = RawAnimation.begin().thenLoop("animation.villager.talk");
-    private static final RawAnimation SLEEP = RawAnimation.begin().thenLoop("animation.villager.sleep");
+    /** The embodied behaviour key, e.g. {@code villagersimulator:work}; the client maps it to an animation ({@link AnimationKeys}). */
+    public static final EntityDataAccessor<String> BEHAVIOR = SynchedEntityData.defineId(SimVillagerEntity.class, EntityDataSerializers.STRING);
+    private static final String SLEEP_KEY = EmbodiedBehaviors.SLEEP.toString();
 
     private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
     private static final double SPEED = 0.6;
@@ -55,6 +49,10 @@ public class SimVillagerEntity extends PathfinderMob implements GeoEntity {
     private double lastTx = Double.NaN, lastTy, lastTz;
     private String lastLabel = "";
     private int repath;
+    // The addon behaviour being performed (mod-api EmbodiedBehaviour), and for how long.
+    private com.ewitulsk.villagersimulator.api.sim.Id activeKey;
+    private com.ewitulsk.villagersimulator.api.mod.embodiment.EmbodiedBehaviour active;
+    private int activeTicks;
 
     public SimVillagerEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -71,14 +69,14 @@ public class SimVillagerEntity extends PathfinderMob implements GeoEntity {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
         builder.define(APPEARANCE, 0);
-        builder.define(BEHAVIOR, BEHAVIOR_IDLE);
+        builder.define(BEHAVIOR, EmbodiedBehaviors.IDLE.toString());
     }
 
     public int appearance() {
         return entityData.get(APPEARANCE);
     }
 
-    public byte behavior() {
+    public String behavior() {
         return entityData.get(BEHAVIOR);
     }
 
@@ -89,15 +87,10 @@ public class SimVillagerEntity extends PathfinderMob implements GeoEntity {
 
     /** Animation state driven by the embodied behaviour the sim sends (docs/ARCHITECTURE.md §16). */
     private PlayState animate(AnimationState<SimVillagerEntity> state) {
-        byte b = behavior();
-        if (isSleeping() || b == BEHAVIOR_SLEEP) return state.setAndContinue(SLEEP);
-        if (state.isMoving()) return state.setAndContinue(WALK);
-        return state.setAndContinue(switch (b) {
-            case BEHAVIOR_WORK -> WORK;
-            case BEHAVIOR_EAT -> EAT;
-            case BEHAVIOR_TALK -> TALK;
-            default -> IDLE;
-        });
+        String key = behavior();
+        if (isSleeping() || SLEEP_KEY.equals(key)) return state.setAndContinue(AnimationKeys.SLEEP);
+        if (state.isMoving()) return state.setAndContinue(AnimationKeys.WALK);
+        return state.setAndContinue(AnimationKeys.get(key));
     }
 
     @Override
@@ -126,6 +119,7 @@ public class SimVillagerEntity extends PathfinderMob implements GeoEntity {
             }
             super.tick();
             apply(e);
+            perform(sim, e);
             return;
         }
         super.tick();
@@ -145,13 +139,8 @@ public class SimVillagerEntity extends PathfinderMob implements GeoEntity {
 
         boolean sleep = EmbodiedBehaviors.SLEEP.equals(e.behavior());
         if (appearance() != (int) e.appearance()) entityData.set(APPEARANCE, (int) e.appearance());
-        byte behavior = partner != null ? BEHAVIOR_TALK
-                : sleep ? BEHAVIOR_SLEEP
-                : EmbodiedBehaviors.WORK.equals(e.behavior()) ? BEHAVIOR_WORK
-                : EmbodiedBehaviors.EAT.equals(e.behavior()) ? BEHAVIOR_EAT
-                : EmbodiedBehaviors.WALK.equals(e.behavior()) ? BEHAVIOR_WALK
-                : BEHAVIOR_IDLE;
-        if (behavior() != behavior) entityData.set(BEHAVIOR, behavior);
+        String behavior = (partner != null ? EmbodiedBehaviors.TALK : e.behavior()).toString();
+        if (!behavior().equals(behavior)) entityData.set(BEHAVIOR, behavior);
         BlockPos target = BlockPos.containing(e.tx(), e.ty(), e.tz());
         if (isSleeping()) {
             if (sleep && target.equals(getSleepingPos().orElse(null))) return;
@@ -186,6 +175,75 @@ public class SimVillagerEntity extends PathfinderMob implements GeoEntity {
         lastTx = e.tx();
         lastTy = e.ty();
         lastTz = e.tz();
+    }
+
+    /** Runs the addon's embodied behaviour for the current activity, if one is registered (mod-api). */
+    private void perform(SimServer sim, Embodiment e) {
+        var key = e.behavior();
+        var behaviour = sim.behaviour(key);
+        if (active != null && (behaviour != active || !key.equals(activeKey))) {
+            try {
+                active.stop(new PuppetContextImpl(this, e, activeKey, activeTicks));
+            } catch (RuntimeException ex) {
+                org.slf4j.LoggerFactory.getLogger("VillagerSim").warn("Embodied behaviour {} failed to stop", activeKey, ex);
+            }
+            active = null;
+        }
+        if (behaviour == null) return;
+        if (active == null) {
+            active = behaviour;
+            activeKey = key;
+            activeTicks = 0;
+        }
+        try {
+            behaviour.tick(new PuppetContextImpl(this, e, key, activeTicks++));
+        } catch (RuntimeException ex) {
+            org.slf4j.LoggerFactory.getLogger("VillagerSim").warn("Embodied behaviour {} failed", key, ex);
+            active = null;
+        }
+    }
+
+    /** What addon behaviours see of this puppet. */
+    private record PuppetContextImpl(SimVillagerEntity puppet, Embodiment e, com.ewitulsk.villagersimulator.api.sim.Id key, int ticks)
+            implements com.ewitulsk.villagersimulator.api.mod.embodiment.PuppetContext {
+        PuppetContextImpl(SimVillagerEntity puppet, Embodiment e) {
+            this(puppet, e, e.behavior(), 0);
+        }
+
+        @Override
+        public PathfinderMob entity() {
+            return puppet;
+        }
+
+        @Override
+        public net.minecraft.server.level.ServerLevel level() {
+            return (net.minecraft.server.level.ServerLevel) puppet.level();
+        }
+
+        @Override
+        public com.ewitulsk.villagersimulator.api.sim.EntityId villager() {
+            return e.id();
+        }
+
+        @Override
+        public com.ewitulsk.villagersimulator.api.sim.Id activity() {
+            return e.activity();
+        }
+
+        @Override
+        public com.ewitulsk.villagersimulator.api.sim.Id behaviour() {
+            return key;
+        }
+
+        @Override
+        public net.minecraft.world.phys.Vec3 target() {
+            return new net.minecraft.world.phys.Vec3(e.tx(), e.ty(), e.tz());
+        }
+
+        @Override
+        public boolean arrived() {
+            return puppet.distanceToSqr(e.tx(), e.ty(), e.tz()) < 1.2 * 1.2;
+        }
     }
 
     /** Right-click: talk, or give the held item as a gift. */

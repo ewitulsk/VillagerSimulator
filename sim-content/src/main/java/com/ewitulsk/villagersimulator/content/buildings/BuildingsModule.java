@@ -46,7 +46,7 @@ public final class BuildingsModule implements SimModule {
             EntityId venue = env.venue();
             if (venue.isNone() || !env.sim().has(venue, Buildings.BUILDING)) return 0;
             return Buildings.stock(env.sim(), venue, a.string(0, env));
-        }));
+        }).describe("`stock('good')`: how many of a good the venue has."));
         // Blocks from the actor to the centre of the venue.
         r.function(ExpressionFunction.number("distance", List.of(), (env, a) -> {
             double[] p = env.actorPos();
@@ -55,7 +55,7 @@ public final class BuildingsModule implements SimModule {
             double[] c = Buildings.centre(env.sim(), venue);
             double dx = p[0] - c[0], dz = p[2] - c[2];
             return Math.sqrt(dx * dx + dz * dz);
-        }));
+        }).describe("Distance in blocks from the actor's position to the venue."));
         // {"type": "consume", "good": "bread", "count": 1}: take goods from the venue's stock.
         r.effect(VS.id("consume"), (json, logic) -> {
             if (!json.has("good")) throw new ExpressionException("\"consume\" needs a \"good\": " + json);

@@ -40,7 +40,16 @@ public final class VanillaPoints {
 
     /** The data with detected points added to building types that don't list them. */
     public static DataSource augment(MinecraftServer server, DataSource base) {
+        return augment(server, base, Map.of());
+    }
+
+    /** The same, with point blocks addons registered in code ({@code RegisterPointBlocksEvent}) as well as data. */
+    public static DataSource augment(MinecraftServer server, DataSource base, Map<Block, String> extra) {
         Map<String, List<Block>> kinds = pointBlocks(base);
+        extra.forEach((block, kind) -> {
+            List<Block> list = kinds.computeIfAbsent(kind, k -> new ArrayList<>());
+            if (!list.contains(block)) list.add(block);
+        });
         Map<Id, JsonElement> types = new TreeMap<>();
         base.load(TYPES).forEach((id, json) -> types.put(id, augmentType(server, json, kinds)));
         return folder -> folder.equals(TYPES) ? types : base.load(folder);

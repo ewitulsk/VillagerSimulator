@@ -39,14 +39,14 @@ public final class VillagesModule implements SimModule {
         r.function(ExpressionFunction.bool("is_home", List.of(), (env, a) -> {
             Villager v = env.actor().isNone() ? null : env.sim().get(env.actor(), Villages.VILLAGER);
             return v != null && !env.venue().isNone() && v.home().equals(env.venue());
-        }));
+        }).describe("True when the venue is the actor's home."));
         r.function(ExpressionFunction.bool("is_workplace", List.of(), (env, a) -> {
             Villager v = env.actor().isNone() ? null : env.sim().get(env.actor(), Villages.VILLAGER);
             return v != null && v.employed() && v.workplace().equals(env.venue());
-        }));
+        }).describe("True when the venue is the actor's workplace."));
         r.function(ExpressionFunction.bool("has_job", List.of(), (env, a) -> {
             Villager v = env.actor().isNone() ? null : env.sim().get(env.actor(), Villages.VILLAGER);
             return v != null && v.employed();
-        }));
+        }).describe("True when the actor is employed."));
     }
 }

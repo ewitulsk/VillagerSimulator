@@ -1,5 +1,7 @@
 package com.ewitulsk.villagersimulator.api.sim.util;
 
+import org.jetbrains.annotations.ApiStatus;
+
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -9,6 +11,7 @@ import java.util.function.Function;
  * definitions, their expression strings) over and over. Reads never lock: the map is copied on write. Meant for a
  * bounded set of keys; past {@code limit} entries it starts over, so keys created at runtime can't grow it forever.
  */
+@ApiStatus.Internal
 public final class IdentityCache<K, V> {
     private final int limit;
     private volatile IdentityHashMap<K, V> map = new IdentityHashMap<>();

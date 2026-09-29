@@ -30,6 +30,13 @@ public final class SimRuntime implements AutoCloseable {
     private final Thread thread;
     private volatile SimViewsImpl views = SimViewsImpl.EMPTY;
     private volatile boolean running = true;
+    // Outbox (docs/ARCHITECTURE.md §10.2): new event records for the server thread, filled on the sim thread.
+    private static final int OUTBOX_LIMIT = 100_000;
+    private final ConcurrentLinkedQueue<com.ewitulsk.villagersimulator.api.sim.event.EventRecord> outbox = new ConcurrentLinkedQueue<>();
+    private final java.util.concurrent.atomic.AtomicInteger outboxSize = new java.util.concurrent.atomic.AtomicInteger();
+    private volatile boolean outboxEnabled;
+    private int outboxIndex;
+    private long outboxDropped;
     private volatile Throwable lastError;
 
     public SimRuntime(SimWorld world, String threadName) {
@@ -67,6 +74,38 @@ public final class SimRuntime implements AutoCloseable {
 
     public Throwable lastError() {
         return lastError;
+    }
+
+    /**
+     * Starts copying new event records to the outbox for {@link #pollOutbox}. Records logged before this call are
+     * skipped. If nobody drains it, the outbox keeps the latest records only.
+     */
+    public void enableOutbox() {
+        run(w -> {
+            outboxIndex = w.events().size();
+            outboxEnabled = true;
+        });
+    }
+
+    /** The next new event record, or {@code null}. Safe on any thread. */
+    public com.ewitulsk.villagersimulator.api.sim.event.EventRecord pollOutbox() {
+        var r = outbox.poll();
+        if (r != null) outboxSize.decrementAndGet();
+        return r;
+    }
+
+    private void fillOutbox() {
+        if (!outboxEnabled) return;
+        int size = world.events().size();
+        if (size <= outboxIndex) return;
+        for (var r : world.eventsSince(outboxIndex)) {
+            outbox.add(r);
+            if (outboxSize.incrementAndGet() > OUTBOX_LIMIT && outbox.poll() != null) {
+                outboxSize.decrementAndGet();
+                if (outboxDropped++ % 10_000 == 0) LOG.warn("Sim event outbox full; dropping the oldest records");
+            }
+        }
+        outboxIndex = size;
     }
 
     public void submit(SimCommand command) {
@@ -160,6 +199,8 @@ public final class SimRuntime implements AutoCloseable {
         } catch (Throwable t) {
             fail("publishing views", t);
         }
+        // After the views, so a listener reacting to a record already sees the world it happened in.
+        fillOutbox();
     }
 
     private void fail(String what, Throwable t) {

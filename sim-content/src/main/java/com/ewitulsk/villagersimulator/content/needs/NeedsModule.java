@@ -33,8 +33,8 @@ public final class NeedsModule implements SimModule {
             r.component(t.need().component());
             r.stat(new StatType(t.decayStat(), 1.0));
         }
-        r.function(ExpressionFunction.number("need", List.of(ExprType.STRING), (env, a) -> value(env, a.string(0, env))));
-        r.function(ExpressionFunction.number("deficit", List.of(ExprType.STRING), (env, a) -> Need.MAX - value(env, a.string(0, env))));
+        r.function(ExpressionFunction.number("need", List.of(ExprType.STRING), (env, a) -> value(env, a.string(0, env))).describe("`need('hunger')`: the actor's need, 0 (desperate) to 100 (satisfied)."));
+        r.function(ExpressionFunction.number("deficit", List.of(ExprType.STRING), (env, a) -> Need.MAX - value(env, a.string(0, env))).describe("`deficit('hunger')`: 100 minus the need."));
         r.effect(VS.id("need"), (json, logic) -> {
             JsonElement need = json.get("need");
             JsonElement amount = json.get("amount");

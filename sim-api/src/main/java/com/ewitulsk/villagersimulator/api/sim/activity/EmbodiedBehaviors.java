@@ -9,6 +9,8 @@ public final class EmbodiedBehaviors {
     public static final Id WORK = Id.of("villagersimulator", "work");
     public static final Id SLEEP = Id.of("villagersimulator", "sleep");
     public static final Id EAT = Id.of("villagersimulator", "eat");
+    /** Chatting with someone. The bridge plays it for embodied conversations. */
+    public static final Id TALK = Id.of("villagersimulator", "talk");
 
     private EmbodiedBehaviors() {}
 }

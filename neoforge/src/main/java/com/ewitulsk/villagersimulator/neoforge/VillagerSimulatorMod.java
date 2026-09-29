@@ -1,5 +1,7 @@
 package com.ewitulsk.villagersimulator.neoforge;
 
+import com.ewitulsk.villagersimulator.api.mod.RegisterSimModulesEvent;
+
 import com.ewitulsk.villagersimulator.content.ContentModules;
 import com.ewitulsk.villagersimulator.neoforge.client.ClientSetup;
 import com.ewitulsk.villagersimulator.neoforge.command.VsCommands;
@@ -45,6 +47,8 @@ public final class VillagerSimulatorMod {
                 e -> e.put(ModContent.VILLAGER.get(), SimVillagerEntity.createAttributes().build()));
         // Our own content registers exactly like an addon would (docs/ARCHITECTURE.md §3, "dogfood the API").
         modBus.addListener(RegisterSimModulesEvent.class, e -> ContentModules.all().forEach(e::register));
+        modBus.addListener(com.ewitulsk.villagersimulator.api.mod.event.RegisterScenariosEvent.class,
+                e -> com.ewitulsk.villagersimulator.harness.BuiltinScenarios.all().forEach(e::register));
         if (FMLEnvironment.dist == Dist.CLIENT) ClientSetup.init(modBus);
         modBus.addListener(RegisterPayloadHandlersEvent.class, e -> {
             PayloadRegistrar registrar = e.registrar("1");

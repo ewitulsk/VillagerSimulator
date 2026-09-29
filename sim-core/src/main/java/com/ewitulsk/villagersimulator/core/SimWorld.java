@@ -1027,6 +1027,11 @@ public final class SimWorld implements SimContext, AutoCloseable {
         return s;
     }
 
+    /** Records from absolute log position {@code index} on (see {@code EventLog.size()}), in log order. */
+    public List<EventRecord> eventsSince(int index) {
+        return eventLog.from(index);
+    }
+
     /** Event records held in memory (the rest are only in the save). */
     public int retainedEvents() {
         return eventLog.retained();

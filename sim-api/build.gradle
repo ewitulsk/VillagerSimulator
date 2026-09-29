@@ -3,4 +3,20 @@ dependencies {
     api "com.mojang:datafixerupper:${dfuVersion}"
     api "com.google.code.gson:gson:${gsonVersion}"
     api "org.slf4j:slf4j-api:${slf4jVersion}"
+    // @ApiStatus stability markers (compile-time only).
+    compileOnlyApi "org.jetbrains:annotations:${annotationsVersion}"
+}
+
+// Publishable (docs/ARCHITECTURE.md §11, A23: not hosted yet). Addons can build against it with publishToMavenLocal.
+apply plugin: 'maven-publish'
+java {
+    withSourcesJar()
+}
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifactId = 'villagersimulator-sim-api'
+            from components.java
+        }
+    }
 }

@@ -16,4 +16,7 @@ include 'sim-core'      // engine
 include 'sim-content'   // base game modules (sim-api only)
 include 'sim-harness'   // headless runner and scenarios
 include 'sim-bench'     // scale benchmark and JMH micro-benchmarks (docs/ROADMAP.md Phase 6)
+include 'mod-api'       // PUBLIC: Minecraft-side addon API
 include 'neoforge'      // the mod
+include 'compat:kubejs' // optional KubeJS integration, loaded only when KubeJS is installed
+include 'examples:fountain' // reference addon, built against the public APIs only

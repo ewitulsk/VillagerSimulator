@@ -22,6 +22,22 @@ public final class VillageLayouts {
 
     private VillageLayouts() {}
 
+    /**
+     * Building types that data (usually an addon) asks generated villages to include ({@link BuildingType.Layout}),
+     * with how many of each for {@code villagers}, in id order so layouts stay deterministic.
+     */
+    static List<Id> extras(SimRegistry<BuildingType> types, int villagers, String district) {
+        List<Id> ids = new ArrayList<>(types.ids());
+        ids.sort(java.util.Comparator.comparing(Id::toString));
+        List<Id> out = new ArrayList<>();
+        for (Id id : ids) {
+            BuildingType t = types.get(id);
+            if (t.layout().isEmpty() || !t.layout().get().district().equals(district)) continue;
+            for (int k = 0; k < t.layout().get().count(villagers); k++) out.add(id);
+        }
+        return out;
+    }
+
     /** Building placements plus the districts they're grouped into. */
     public record Layout(List<SpawnVillageCommand.Placement> placements, List<District.Spec> districts) {}
 
@@ -44,6 +60,7 @@ public final class VillageLayouts {
         for (int i = 0; i < bakeries - oldTownBakeries; i++) market.add(BAKERY);
         for (int i = 0; i < taverns; i++) market.add(TAVERN);
         for (int i = 0; i < stalls; i++) market.add(MARKET_STALL);
+        market.addAll(extras(types, villagers, "market"));
         int marketRows = (market.size() + 2) / 3;
         int top = cz - (marketRows * 14) / 2;
         for (int i = 0; i < market.size(); i++) {
@@ -54,6 +71,7 @@ public final class VillageLayouts {
         // Old Town: a well among rows of 5 houses, 13 blocks apart, west of the centre.
         List<Id> oldTown = new ArrayList<>();
         for (int i = 0; i < houses; i++) oldTown.add(HOUSE);
+        oldTown.addAll(extras(types, villagers, "residential"));
         // Spread the Old Town bakeries through the houses.
         for (int i = 0; i < oldTownBakeries; i++) oldTown.add((i + 1) * oldTown.size() / (oldTownBakeries + 1), BAKERY);
         int houseRows = (oldTown.size() + 4) / 5;
@@ -104,6 +122,15 @@ public final class VillageLayouts {
             int[] s = slots[i % slots.length];
             int push = ring * (house.sizeX() + GAP);
             out.add(new SpawnVillageCommand.Placement(HOUSE, s[0] - push, y, s[1]));
+        }
+        // Buildings added by data (e.g. an addon's fountain): a row east of the bakery.
+        List<Id> extra = new ArrayList<>(extras(types, villagers, "market"));
+        extra.addAll(extras(types, villagers, "residential"));
+        int ex = bakeryX + bakery.sizeX() + GAP + 4, ez = cz;
+        for (Id id : extra) {
+            BuildingType t = types.get(id);
+            out.add(new SpawnVillageCommand.Placement(id, ex, y, ez - t.sizeZ() / 2));
+            ex += t.sizeX() + GAP;
         }
         return out;
     }

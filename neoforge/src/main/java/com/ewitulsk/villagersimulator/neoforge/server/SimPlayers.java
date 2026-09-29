@@ -69,10 +69,11 @@ public final class SimPlayers {
         CompletableFuture<Dialogue.View> sent = new CompletableFuture<>();
         handle(sim, player).thenAccept(me -> {
             sim.runtime().submit(new Dialogue.Open(v, me));
-            sim.runtime().query(Dialogue.view(v, me, "")).thenAccept(view -> sim.server().execute(() -> {
-                sent.complete(view);
-                send(player, DialoguePayload.of(villager.getId(), view));
-            }));
+            sim.runtime().query(ctx -> new ViewAndFacts(Dialogue.view(v, me, "").run(ctx), sim.facts(ctx, v)))
+                    .thenAccept(vf -> sim.server().execute(() -> {
+                        sent.complete(vf.view());
+                        send(player, DialoguePayload.of(villager.getId(), vf.view(), vf.facts()));
+                    }));
         });
         return sent;
     }
@@ -85,9 +86,12 @@ public final class SimPlayers {
         if (villager.distanceTo(player) > TALK_RANGE) return;
         EntityId v = new EntityId(villager.handle());
         handle(sim, player).thenAccept(me -> sim.runtime().submit(new Dialogue.Choose(v, me, payload.option(),
-                reply -> sim.runtime().query(Dialogue.view(v, me, reply)).thenAccept(view -> sim.server().execute(
-                        () -> send(player, DialoguePayload.of(villager.getId(), view)))))));
+                reply -> sim.runtime().query(ctx -> new ViewAndFacts(Dialogue.view(v, me, reply).run(ctx), sim.facts(ctx, v)))
+                        .thenAccept(vf -> sim.server().execute(
+                                () -> send(player, DialoguePayload.of(villager.getId(), vf.view(), vf.facts())))))));
     }
+
+    private record ViewAndFacts(Dialogue.View view, java.util.Map<String, String> facts) {}
 
     /** Sends a payload; players without the channel (e.g. fake connections) are skipped. */
     private static void send(ServerPlayer player, DialoguePayload payload) {

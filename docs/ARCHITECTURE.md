@@ -137,6 +137,7 @@ examples/*, integrations/* ──▶ sim-api, mod-api  (only)
 ```
 
 - `sim-content` must **never** depend on `sim-core` internals.
+- **As built (Phase 7):** `mod-api/`, `compat/kubejs/` and `examples/fountain/` exist. The reference addon is a fountain rather than hospitals. `sim-harness` is packed into the mod so `/vs scenario run` can run scenarios in game. `sim-bench` holds the scale benchmark. `./gradlew checkDependencyRules` enforces the rules; `compat/kubejs` and `examples/*` may use only `sim-api` and `mod-api`. The rules are listed in the root `build.gradle`.
 - Only `sim-api` and `mod-api` are public artifacts (versioned; publishable, not yet hosted).
 
 **Package naming:**
@@ -401,6 +402,7 @@ Sim threads ──events──▶ outbox ──▶ bridge dispatches on server t
 Sim threads ◀──────── commands (applied at next window boundary) ◀────────────┘
 ```
 - **The sim never waits for scripts.** Script reactions are commands applied at the next boundary.
+- **As built (Phase 7):** the runtime copies new event-log records into an outbox. The bridge posts each one as a `SimRecordEvent` on the game bus, and the KubeJS plugin re-posts it as `VillagerSimEvents.recorded`. KubeJS finds the plugin through `kubejs.plugins.txt`, so nothing else refers to KubeJS. Script scenarios run in their own world, with the script body on the server thread.
 - Reads go through **views**, which are safe on the server thread.
 
 ### 10.3 What KubeJS scripts can do
@@ -437,6 +439,7 @@ Anything that runs **synchronously inside sim decisions**: Activity `simulateAbs
 - **CI compatibility check** (japicmp) fails the build on unannounced breaking changes.
 - **Reference addon** (`examples/hospitals`) built in CI against the public APIs only. It proves the extensibility test.
 - **Docs:** Javadoc + generated expression-function reference + KubeJS reference, from the same source.
+- **As built (Phase 7):** both APIs are publishable (`publishToMavenLocal`). japicmp checks them against `api/baseline/` in CI (`apiCompatibility`), with `@ApiStatus.Internal` members exempt, and the baseline is updated to announce a break (`updateApiBaseline`). The reference addon, the KubeJS binding and the expression reference ([EXPRESSIONS.md](EXPRESSIONS.md), generated, with a test that fails when it's stale) are described in [MODDING.md](MODDING.md).
 - **Distribution** [DECIDED: A23]: **no Maven hosting for now.**
   - The API subprojects are still set up as publishable artifacts (Gradle `maven-publish`), so hosting can be switched on later with one repository block.
   - Addons, including the reference addon, build against them through `publishToMavenLocal` or as Gradle subprojects in the same build.

@@ -65,6 +65,9 @@ public final class ScaleGameTests {
                     double mspt = server.getAverageTickTimeNanos() / 1e6;
                     require(mspt < 25, "server tick time " + mspt + " ms with 20k stress villagers");
                     server.getCommands().performPrefixedCommand(source, "vs profile");
+                    // Leave the shared sim as we found it for the other tests.
+                    server.getCommands().performPrefixedCommand(source, "vs stress clear");
+                    require(stressVillagers() == 0, "stress villages cleared");
                     com.mojang.logging.LogUtils.getLogger().info("VS_SCALE stress test took {} ms, {} ms/tick",
                             (System.nanoTime() - startNanos) / 1_000_000, mspt);
                 })

@@ -1,13 +1,14 @@
 plugins {
     id 'java-library'
-    id 'net.neoforged.moddev' version '2.0.147'
+    id 'net.neoforged.moddev'
     id 'idea'
 }
 
-// The simulation projects are part of this mod: their classes and data are packed into the mod jar,
-// and in dev they are registered as source sets of the same mod.
-def simProjects = [':sim-api', ':sim-core', ':sim-content']
+// The simulation projects, the public mod API and the optional KubeJS integration are part of this mod: their
+// classes and data are packed into the mod jar, and in dev they are registered as source sets of the same mod.
+def simProjects = [':sim-api', ':sim-core', ':sim-content', ':sim-harness', ':mod-api', ':compat:kubejs']
 simProjects.each { evaluationDependsOn(it) }
+evaluationDependsOn(':examples:fountain')
 
 base {
     archivesName = mod_id
@@ -19,7 +20,9 @@ def prop = { String name -> providers.gradleProperty(name) }
 
 // GameTest namespaces. NeoForge 1.21.1 selects GameTests by namespace (see ../ModTesting.md), so each area gets
 // one. Every namespace needs an `empty` template, generated below.
-def testNamespaces = ['villagersimulator_bridge', 'villagersimulator_time', 'villagersimulator_data', 'villagersimulator_social', 'villagersimulator_players', 'villagersimulator_scale']
+def withKubeJs = prop('vsKubeJS').getOrElse('false') == 'true'
+def testNamespaces = ['villagersimulator_bridge', 'villagersimulator_time', 'villagersimulator_data', 'villagersimulator_social',
+                      'villagersimulator_players', 'villagersimulator_scale', 'villagersimulator_kubejs', 'villagersimulator_fountain']
 
 neoForge {
     version = project.neo_version
@@ -49,7 +52,10 @@ neoForge {
         gameTestServer {
             type = 'gameTestServer'
             gameDirectory = file(prop('vsTestRunDir').getOrElse('runs/gametest'))
-            systemProperty 'neoforge.enabledGameTestNamespaces', prop('vsGameTestNamespaces').getOrElse(testNamespaces.join(','))
+            // KubeJS runs only with -PvsKubeJS=true, and then only its tests by default: KubeJS syncs data to every
+            // player that joins, which mock players' fake connections can't take.
+            systemProperty 'neoforge.enabledGameTestNamespaces', prop('vsGameTestNamespaces').getOrElse(
+                    withKubeJs ? 'villagersimulator_kubejs' : testNamespaces.findAll { it != 'villagersimulator_kubejs' }.join(','))
             programArgument '--nogui'
         }
         configureEach {
@@ -67,6 +73,10 @@ neoForge {
             sourceSet(sourceSets.main)
             simProjects.each { sourceSet(project(it).sourceSets.main) }
         }
+        // The reference addon runs alongside the mod in dev (docs/ROADMAP.md Phase 7).
+        villagersimulator_fountain {
+            sourceSet(project(':examples:fountain').sourceSets.main)
+        }
     }
 }
 
@@ -82,14 +92,37 @@ if (prop('vs_hotswap').getOrElse('false') == 'true') {
 
 repositories {
     maven {
+        name = 'KubeJS'
+        url = 'https://maven.latvian.dev/releases'
+        content {
+            includeGroup('dev.latvian.mods')
+            includeGroup('dev.latvian.apps')
+        }
+    }
+    maven {
+        // KubeJS's GIF library
+        name = 'JitPack'
+        url = 'https://jitpack.io'
+        content { includeGroup('com.github.rtyley') }
+    }
+    maven {
         name = 'GeckoLib'
         url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
         content { includeGroup('software.bernie.geckolib') }
     }
 }
 
+// Mods that only run in dev: the reference addon, and KubeJS for the scripting GameTests (-PvsKubeJS=true). Not
+// dependencies of the mod itself (the dependency-rule check doesn't look at these configurations).
+configurations {
+    devMods
+    runtimeClasspath.extendsFrom devMods
+}
+
 dependencies {
     simProjects.each { implementation project(it) }
+    devMods project(':examples:fountain')
+    if (withKubeJs) devMods "dev.latvian.mods:kubejs-neoforge:${kubejs_version}"
     // Villager models and animations (docs/ARCHITECTURE.md A18). A required mod dependency, not bundled.
     implementation "software.bernie.geckolib:geckolib-neoforge-1.21.1:${geckolib_version}"
     // SQLite is not shipped by Minecraft, so it is jar-in-jar'd (docs/ARCHITECTURE.md §17).
@@ -179,8 +212,19 @@ idea {
 // previous script's town) never carries over.
 def gameTestWorld = file('runs/gametest/world')
 def scriptWorld = file('runs/clientscript/saves/vs-script')
+// The scripting GameTests' KubeJS scripts.
+def gameTestScripts = file('src/gametest/kubejs')
+def gameTestKubeJs = file('runs/gametest/kubejs')
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    doFirst { gameTestWorld.deleteDir() }
+    doFirst {
+        gameTestWorld.deleteDir()
+        new File(gameTestKubeJs, 'server_scripts').deleteDir()
+        gameTestScripts.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+            def target = new File(gameTestKubeJs, gameTestScripts.toPath().relativize(f.toPath()).toString())
+            target.parentFile.mkdirs()
+            target.bytes = f.bytes
+        }
+    }
 }
 tasks.matching { it.name == 'runClientScript' }.configureEach {
     doFirst { scriptWorld.deleteDir() }

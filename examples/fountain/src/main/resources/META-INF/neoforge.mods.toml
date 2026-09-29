@@ -1,0 +1,18 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "MIT"
+
+[[mods]]
+modId = "villagersimulator_fountain"
+version = "0.1.0"
+displayName = "Villager Simulator: Fountain (reference addon)"
+description = '''
+A fountain where villagers make wishes. The reference addon for Villager Simulator, built only against its public APIs.
+'''
+
+[[dependencies.villagersimulator_fountain]]
+modId = "villagersimulator"
+type = "required"
+versionRange = "[0.1,)"
+ordering = "AFTER"
+side = "BOTH"

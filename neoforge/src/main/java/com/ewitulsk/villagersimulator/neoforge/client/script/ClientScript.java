@@ -82,6 +82,7 @@ public final class ClientScript {
         switch (NAME) {
             case "look" -> buildLook();
             case "town" -> buildTown();
+            case "fountain" -> buildFountain();
             default -> throw new IllegalArgumentException("Unknown client script " + NAME);
         }
     }
@@ -128,6 +129,85 @@ public final class ClientScript {
         shot("town_overlay", "two districts (cyan boxes), chunk tiers, houses west, market east, routes in blue");
         then("street camera", 100, () -> tp(origin.add(20, 4, 12), origin.add(30, 0, -6)));
         shot("market_street", "villagers walking between bakeries, taverns and stalls in the Market Quarter");
+    }
+
+    /**
+     * Phase 7 visual check: the reference addon's fountain in a hamlet, a villager making a wish at it (gold nugget,
+     * splashes), and the addon's dialogue panel.
+     */
+    private void buildFountain() {
+        then("spawn a hamlet", 60, () -> {
+            origin = mc.player.position();
+            mc.player.getAbilities().flying = true;
+            mc.player.onUpdateAbilities();
+            mc.options.tutorialStep = net.minecraft.client.tutorial.TutorialSteps.NONE;
+            mc.getTutorial().setStep(net.minecraft.client.tutorial.TutorialSteps.NONE);
+            cmd("vs village spawn 16 Wishford");
+        });
+        then("warp to morning", 10, () -> cmd("vs time warp 2h"));
+        then("fountain camera", 100, () -> tp(origin.add(20, 4, 12), origin.add(27, 1, 1)));
+        until("villagers embodied", 400, () -> puppets() > 0);
+        // Keep warping the sim an hour at a time until someone is making a wish up close.
+        until("someone makes a wish at the fountain", 2400, () -> {
+            if (stepTicks % 200 == 199) cmd("vs time warp 1h");
+            return onServer(() -> wisher() != null);
+        });
+        then("look at the wisher", 60, () -> {
+            var w = onServer(ClientScript::wisherPosition);
+            if (w != null) tp(w.add(2.5, 3.5, 4.5), w.add(0, 0.8, 0));
+        });
+        shot("fountain_wish", "a villager at the fountain holding a gold nugget, name tag 'Making a wish', splashes");
+        until("a wish was made", 2400, () -> {
+            if (stepTicks % 200 == 199) cmd("vs time warp 1h");
+            return onServer(() -> wishMaker() != null);
+        });
+        then("talk to someone who made a wish", 40, () -> onServer(() -> {
+            var sim = SimServer.get();
+            var who = wishMaker();
+            var player = mc.getSingleplayerServer().getPlayerList().getPlayers().get(0);
+            if (who != null) {
+                player.teleportTo(who.getX() + 1.5, who.getY(), who.getZ() + 1.5);
+                com.ewitulsk.villagersimulator.neoforge.server.SimPlayers.openDialogue(sim, player, who);
+            }
+            return who != null;
+        }));
+        until("dialogue shows the fountain panel", 200, () -> mc.screen instanceof com.ewitulsk.villagersimulator.neoforge.client.DialogueScreen);
+        shot("dialogue_panel", "the dialogue screen with a line 'Wishes made at the fountain: N'");
+        then("close", 1, () -> mc.setScreen(null));
+    }
+
+    private <T> T onServer(java.util.function.Supplier<T> task) {
+        var server = mc.getSingleplayerServer();
+        return server == null ? null : server.submit(task::get).join();
+    }
+
+    /** A puppet at the fountain holding the wishing nugget (server thread). */
+    private static com.ewitulsk.villagersimulator.neoforge.SimVillagerEntity wisher() {
+        var server = Minecraft.getInstance().getSingleplayerServer();
+        for (var e : server.overworld().getEntities(com.ewitulsk.villagersimulator.neoforge.ModContent.VILLAGER.get(), x -> true)) {
+            if (e.getMainHandItem().is(net.minecraft.world.item.Items.GOLD_NUGGET)) return e;
+        }
+        return null;
+    }
+
+    private static Vec3 wisherPosition() {
+        var w = wisher();
+        return w == null ? null : w.position();
+    }
+
+    /** A puppet whose villager has made at least one wish (server thread). */
+    private static com.ewitulsk.villagersimulator.neoforge.SimVillagerEntity wishMaker() {
+        var sim = SimServer.get();
+        var server = Minecraft.getInstance().getSingleplayerServer();
+        java.util.Set<Integer> makers = sim.runtime().query(ctx -> {
+            java.util.Set<Integer> out = new java.util.HashSet<>();
+            for (var r : ctx.events().ofType(com.ewitulsk.villagersimulator.api.sim.Id.of("villagersimulator_fountain", "wish"))) out.add(r.actor().raw());
+            return out;
+        }).join();
+        for (var e : server.overworld().getEntities(com.ewitulsk.villagersimulator.neoforge.ModContent.VILLAGER.get(), x -> true)) {
+            if (makers.contains(e.handle())) return e;
+        }
+        return null;
     }
 
     // ------------------------------------------------------------------ building

@@ -4,3 +4,15 @@ dependencies {
     api project(':sim-core')
     api project(':sim-content')
 }
+
+tasks.register('expressionReference', JavaExec) {
+    group = 'documentation'
+    description = 'Regenerates docs/EXPRESSIONS.md from the registered expression functions.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.ewitulsk.villagersimulator.harness.ExpressionReference'
+    args rootProject.file('docs/EXPRESSIONS.md').path
+}
+
+dependencies {
+    runtimeOnly "org.slf4j:slf4j-simple:${slf4jVersion}"
+}

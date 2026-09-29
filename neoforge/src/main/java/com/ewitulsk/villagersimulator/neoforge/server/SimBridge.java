@@ -55,6 +55,7 @@ public final class SimBridge {
         ServerLevel level = server.overworld();
         advanceClock(level);
         refreshViews();
+        dispatchRecords();
         tickCount++;
         if (tickCount % TIER_INTERVAL == 0) updateTiers(level);
         if (tickCount % RECONCILE_INTERVAL == 0) reconcile(level);
@@ -96,6 +97,24 @@ public final class SimBridge {
         partners = p;
     }
 
+    /**
+     * Posts the sim's new event records on the game bus ({@link com.ewitulsk.villagersimulator.api.mod.event.SimRecordEvent}),
+     * on the server thread, for addons and KubeJS (docs/ARCHITECTURE.md §10.2). Bounded per tick.
+     */
+    private void dispatchRecords() {
+        SimServer sim = SimServer.get();
+        if (sim == null) return;
+        for (int i = 0; i < 2_000; i++) {
+            var r = runtime.pollOutbox();
+            if (r == null) return;
+            try {
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new com.ewitulsk.villagersimulator.api.mod.event.SimRecordEvent(r, sim));
+            } catch (RuntimeException e) {
+                org.slf4j.LoggerFactory.getLogger("VillagerSim").warn("A sim event listener failed on {}", r.type(), e);
+            }
+        }
+    }
+
     /** The latest embodiment for a sim entity, or {@code null} if the sim no longer has it. */
     public Embodiment embodiment(int handle) {
         return embodiments.get(handle);
@@ -131,10 +150,10 @@ public final class SimBridge {
      * player; abstract (T2) in between, or everywhere unloaded while nobody is online.
      */
     private void updateVillageTiers(ServerLevel level, List<ServerPlayer> players) {
-        List<VillageTiers.Summary> villages = viewsSeen == null ? null : viewsSeen.get(VillageTiers.VIEW);
+        List<com.ewitulsk.villagersimulator.api.sim.core.VillageSummary> villages = viewsSeen == null ? null : viewsSeen.get(VillageTiers.VIEW);
         if (villages == null) return;
         double far = SimConfig.T3_RADIUS.get(), near = SimConfig.T0_RADIUS.get() + 64;
-        for (VillageTiers.Summary v : villages) {
+        for (var v : villages) {
             double edge = Double.MAX_VALUE;
             for (ServerPlayer p : players) edge = Math.min(edge, Math.hypot(p.getX() - v.x(), p.getZ() - v.z()) - v.radius());
             boolean ticking = level.isPositionEntityTicking(BlockPos.containing(v.x(), level.getSeaLevel(), v.z()));

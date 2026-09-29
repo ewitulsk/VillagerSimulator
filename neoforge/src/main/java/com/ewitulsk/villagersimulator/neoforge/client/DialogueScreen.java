@@ -35,6 +35,15 @@ public final class DialogueScreen extends UiScreen {
                 .add(new UiNode.Label(Component.literal(state.name()), 0xFFF0C060))
                 .add(new UiNode.Label(Component.literal(state.header()), 0xFFA09070))
                 .add(new UiNode.Label(Component.literal("“" + state.greeting() + "”"), 0xFFF0E6D0));
+        // Addons' panels (mod-api DialoguePanel), from the facts the server sent.
+        var context = new com.ewitulsk.villagersimulator.api.mod.ui.DialoguePanel.Context(state.name(), state.facts());
+        for (var panel : DialoguePanels.all()) {
+            try {
+                for (Component line : panel.lines(context)) body.add(new UiNode.Label(line, 0xFFC8D8F0));
+            } catch (RuntimeException e) {
+                org.slf4j.LoggerFactory.getLogger("VillagerSim").warn("A dialogue panel failed", e);
+            }
+        }
         if (!state.response().isEmpty()) {
             body.add(new UiNode.Label(Component.literal("“" + state.response() + "”").withStyle(s -> s.withItalic(true)), 0xFFD8F0C0));
         }

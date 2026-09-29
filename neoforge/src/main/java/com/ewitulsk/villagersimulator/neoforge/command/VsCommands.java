@@ -82,8 +82,19 @@ public final class VsCommands {
                             c.getSource().sendSuccess(() -> Component.literal("Sim profile reset"), false);
                             return 1;
                         })))
-                .then(Commands.literal("stress").then(Commands.argument("villagers", IntegerArgumentType.integer(1, 2_000_000))
-                        .executes(c -> stress(c, IntegerArgumentType.getInteger(c, "villagers")))))
+                .then(Commands.literal("stress")
+                        .then(Commands.literal("clear").executes(VsCommands::clearStress))
+                        .then(Commands.argument("villagers", IntegerArgumentType.integer(1, 2_000_000))
+                                .executes(c -> stress(c, IntegerArgumentType.getInteger(c, "villagers")))))
+                .then(Commands.literal("scenario")
+                        .then(Commands.literal("list").executes(VsCommands::listScenarios))
+                        .then(Commands.literal("run").then(Commands.argument("name", StringArgumentType.word())
+                                .suggests((c, builder) -> {
+                                    SimServer s = SimServer.get();
+                                    if (s != null) s.scenarios().all().forEach(d -> builder.suggest(d.name()));
+                                    return builder.buildFuture();
+                                })
+                                .executes(c -> runScenario(c, StringArgumentType.getString(c, "name"))))))
                 .then(Commands.literal("save").executes(VsCommands::save)));
     }
 
@@ -247,6 +258,48 @@ public final class VsCommands {
                             String.format(java.util.Locale.ROOT, "Spawned %,d stress villagers in %,d villages from x=%d. They exist only in the sim and "
                                     + "go to T3 while players are far away; watch /vs profile.", villagers, villages, baseX)), true))));
         }
+        return 1;
+    }
+
+    private static int listScenarios(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        List<String> lines = new ArrayList<>();
+        for (var d : sim().scenarios().all()) lines.add(d.name() + (d.description().isEmpty() ? "" : ": " + d.description()));
+        return reply(c, CompletableFuture.completedFuture(lines.isEmpty() ? List.of("No scenarios") : lines));
+    }
+
+    /** Runs a scenario headless in a world of its own (the live sim is untouched) and reports its checks. */
+    private static int runScenario(CommandContext<CommandSourceStack> c, String name) throws CommandSyntaxException {
+        SimServer sim = sim();
+        if (sim.scenarios().find(name).isEmpty()) {
+            c.getSource().sendFailure(Component.literal("No scenario " + name + " (see /vs scenario list)"));
+            return 0;
+        }
+        c.getSource().sendSuccess(() -> Component.literal("Running scenario " + name + "..."), false);
+        return reply(c, sim.runScenario(name).thenApply(r -> r.lines()));
+    }
+
+    /** Removes every {@code /vs stress} village from the sim. */
+    private static int clearStress(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        SimServer sim = sim();
+        CommandSourceStack source = c.getSource();
+        sim.runtime().submit(ctx -> {
+            List<EntityId> villages = new ArrayList<>();
+            ctx.forEach(com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGE, (id, v) -> {
+                if (v.name().startsWith("Stress ")) villages.add(id);
+            });
+            int villagers = 0;
+            for (EntityId id : villages) {
+                var v = ctx.get(id, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGE);
+                villagers += v.residents().size();
+                v.residents().forEach(ctx::destroy);
+                v.buildings().forEach(ctx::destroy);
+                v.districts().forEach(ctx::destroy);
+                ctx.destroy(id);
+            }
+            int n = villagers, k = villages.size();
+            sim.server().execute(() -> source.sendSuccess(() -> Component.literal(
+                    String.format(java.util.Locale.ROOT, "Removed %,d stress villagers in %,d villages", n, k)), true));
+        });
         return 1;
     }
 

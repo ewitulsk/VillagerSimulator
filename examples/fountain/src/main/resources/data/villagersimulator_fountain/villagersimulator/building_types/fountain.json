@@ -1,0 +1,84 @@
+{
+  "blueprint": "villagersimulator_fountain:fountain",
+  "size": [
+    7,
+    3,
+    7
+  ],
+  "points": {
+    "wander": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        3,
+        1,
+        0
+      ],
+      [
+        6,
+        1,
+        0
+      ],
+      [
+        0,
+        1,
+        3
+      ],
+      [
+        6,
+        1,
+        3
+      ],
+      [
+        0,
+        1,
+        6
+      ],
+      [
+        6,
+        1,
+        6
+      ]
+    ],
+    "anchor": [
+      [
+        0,
+        0,
+        0
+      ]
+    ]
+  },
+  "services": [
+    "gather"
+  ],
+  "layout": {
+    "per_villagers": 16,
+    "district": "market"
+  },
+  "advertisements": [
+    {
+      "id": "wish",
+      "activity": "villagersimulator_fountain:make_wish",
+      "point": "wish",
+      "duration": "30m",
+      "needs": {
+        "fun": 30,
+        "social": 5
+      },
+      "score": "wishes() < 3 ? 15 : 0"
+    },
+    {
+      "id": "gather",
+      "activity": "villagersimulator:socialize",
+      "point": "wander",
+      "duration": "1h",
+      "needs": {
+        "social": 20,
+        "fun": 10
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import com.ewitulsk.villagersimulator.api.sim.component.FloatField;
 import com.ewitulsk.villagersimulator.api.sim.component.IntField;
 import com.ewitulsk.villagersimulator.api.sim.core.CoreComponents;
 import com.ewitulsk.villagersimulator.api.sim.core.Tier;
+import com.ewitulsk.villagersimulator.api.sim.core.VillageSummary;
 import com.ewitulsk.villagersimulator.api.sim.view.ViewKey;
 import com.ewitulsk.villagersimulator.content.VS;
 import com.ewitulsk.villagersimulator.content.buildings.Building;
@@ -28,9 +29,9 @@ import java.util.List;
  * Forced tiers are left alone, and villagers who matter to a player never go below T2 (pinning).
  */
 public final class VillageTiers {
-    public static final int DETAILED = 0;
-    public static final int ABSTRACT = 1;
-    public static final int COARSE = 2;
+    public static final int DETAILED = VillageSummary.DETAILED;
+    public static final int ABSTRACT = VillageSummary.ABSTRACT;
+    public static final int COARSE = VillageSummary.COARSE;
 
     public static final DenseComponent COMPONENT = new DenseComponent(VS.id("village_tier"), 1);
     /** {@link #DETAILED}, {@link #ABSTRACT} or {@link #COARSE}. New villages start detailed. */
@@ -38,10 +39,8 @@ public final class VillageTiers {
     /** Distance from the centre to the farthest building, blocks. */
     public static final FloatField RADIUS = COMPONENT.floatField("radius");
 
-    /** What the bridge needs to decide a village's mode. */
-    public record Summary(EntityId village, String name, double x, double z, double radius, int population, int mode) {}
-
-    public static final ViewKey<List<Summary>> VIEW = new ViewKey<>(VS.id("village_summaries"));
+    /** What the bridge needs to decide a village's mode: {@link VillageSummary} (public, in sim-api). */
+    public static final ViewKey<List<VillageSummary>> VIEW = VillageSummary.VIEW;
 
     private VillageTiers() {}
 
@@ -70,9 +69,9 @@ public final class VillageTiers {
         return villager != null && mode(ctx, villager.village()) == DETAILED;
     }
 
-    static List<Summary> summaries(SimContext ctx) {
-        List<Summary> out = new ArrayList<>();
-        ctx.forEach(Villages.VILLAGE, (id, v) -> out.add(new Summary(id, v.name(), v.x() + 0.5, v.z() + 0.5,
+    static List<VillageSummary> summaries(SimContext ctx) {
+        List<VillageSummary> out = new ArrayList<>();
+        ctx.forEach(Villages.VILLAGE, (id, v) -> out.add(new VillageSummary(id, v.name(), v.x() + 0.5, v.z() + 0.5,
                 ctx.has(id, COMPONENT) ? ctx.get(id, RADIUS) : 64, v.residents().size(), mode(ctx, id))));
         return List.copyOf(out);
     }

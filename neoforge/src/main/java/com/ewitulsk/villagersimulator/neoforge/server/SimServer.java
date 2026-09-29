@@ -6,7 +6,7 @@ import com.ewitulsk.villagersimulator.api.sim.registry.SimRegistry;
 import com.ewitulsk.villagersimulator.core.SimRuntime;
 import com.ewitulsk.villagersimulator.core.SimWorld;
 import com.ewitulsk.villagersimulator.core.persistence.SqliteSimStore;
-import com.ewitulsk.villagersimulator.neoforge.RegisterSimModulesEvent;
+import com.ewitulsk.villagersimulator.api.mod.RegisterSimModulesEvent;
 import com.ewitulsk.villagersimulator.neoforge.world.VanillaPoints;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  * The sim for one running server: the world on its own thread, its SQLite store, and the bridge. Created when the
  * server starts, saved with the world, closed when the server stops (docs/ARCHITECTURE.md §12.2).
  */
-public final class SimServer {
+public final class SimServer implements com.ewitulsk.villagersimulator.api.mod.SimAccess {
     private static final Logger LOG = LoggerFactory.getLogger("VillagerSim");
     private static volatile SimServer instance;
 
@@ -44,13 +45,36 @@ public final class SimServer {
         t.setDaemon(true);
         return t;
     });
+    /** Scenarios run headless here, never on the sim thread. */
+    private final ExecutorService scenarioThread = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "VillagerSim-Scenarios");
+        t.setDaemon(true);
+        return t;
+    });
+    // Addon hooks from mod-api (docs/ROADMAP.md Phase 7), collected when the server starts.
+    private final Map<com.ewitulsk.villagersimulator.api.sim.Id, com.ewitulsk.villagersimulator.api.mod.embodiment.EmbodiedBehaviour> behaviours;
+    private final Map<String, com.ewitulsk.villagersimulator.api.mod.ui.VillagerFact> facts;
+    private final Map<net.minecraft.world.level.block.Block, String> pointBlocks;
+    private final ScenarioRegistryImpl scenarios = new ScenarioRegistryImpl();
 
     private SimServer(MinecraftServer server) {
         this.server = server;
         RegisterSimModulesEvent event = new RegisterSimModulesEvent();
         ModLoader.postEvent(event);
         this.modules = List.copyOf(event.modules());
-        this.data = VanillaPoints.augment(server, SimDataReloadListener.current());
+        var behaviourEvent = new com.ewitulsk.villagersimulator.api.mod.embodiment.RegisterEmbodiedBehavioursEvent();
+        ModLoader.postEvent(behaviourEvent);
+        this.behaviours = behaviourEvent.behaviours();
+        var factEvent = new com.ewitulsk.villagersimulator.api.mod.ui.RegisterVillagerFactsEvent();
+        ModLoader.postEvent(factEvent);
+        this.facts = factEvent.facts();
+        var pointEvent = new com.ewitulsk.villagersimulator.api.mod.blueprint.RegisterPointBlocksEvent();
+        ModLoader.postEvent(pointEvent);
+        this.pointBlocks = pointEvent.points();
+        var scenarioEvent = new com.ewitulsk.villagersimulator.api.mod.event.RegisterScenariosEvent();
+        ModLoader.postEvent(scenarioEvent);
+        scenarioEvent.scenarios().forEach(scenarios::register);
+        this.data = VanillaPoints.augment(server, SimDataReloadListener.current(), pointBlocks);
 
         ServerLevel overworld = server.overworld();
         Path file = server.getWorldPath(LevelResource.ROOT).resolve("villagersimulator").resolve("sim.db");
@@ -62,6 +86,7 @@ public final class SimServer {
 
         this.world = world;
         this.runtime = new SimRuntime(world, "VillagerSim");
+        runtime.enableOutbox();
         this.bridge = new SimBridge(server, runtime);
         runtime.start();
     }
@@ -72,7 +97,7 @@ public final class SimServer {
 
     /** Applies reloaded datapack data to the running sim ({@code /reload}). Server thread. */
     public void reload(com.ewitulsk.villagersimulator.core.data.DataSource raw) {
-        com.ewitulsk.villagersimulator.core.data.DataSource augmented = VanillaPoints.augment(server, raw);
+        com.ewitulsk.villagersimulator.core.data.DataSource augmented = VanillaPoints.augment(server, raw, pointBlocks);
         runtime.submitWorld(w -> {
             w.reloadData(augmented);
             logProblems(w.problems());
@@ -107,8 +132,63 @@ public final class SimServer {
         return bridge;
     }
 
+    @Override
     public MinecraftServer server() {
         return server;
+    }
+
+    /** The embodied behaviour addons registered for a key, or {@code null}. */
+    public com.ewitulsk.villagersimulator.api.mod.embodiment.EmbodiedBehaviour behaviour(com.ewitulsk.villagersimulator.api.sim.Id key) {
+        return behaviours.get(key);
+    }
+
+    /** Villager facts for dialogue panels, read on the sim thread. */
+    public Map<String, String> facts(com.ewitulsk.villagersimulator.api.sim.SimContext ctx, com.ewitulsk.villagersimulator.api.sim.EntityId villager) {
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        facts.forEach((key, fact) -> {
+            try {
+                String value = fact.read(ctx, villager);
+                if (value != null) out.put(key, value);
+            } catch (RuntimeException e) {
+                LOG.warn("Villager fact {} failed", key, e);
+            }
+        });
+        return out;
+    }
+
+    // ------------------------------------------------------------------------------------------------ SimAccess
+
+    @Override
+    public void submit(com.ewitulsk.villagersimulator.api.sim.command.SimCommand command) {
+        runtime.submit(command);
+    }
+
+    @Override
+    public <T> CompletableFuture<T> query(com.ewitulsk.villagersimulator.api.sim.command.SimQuery<T> query) {
+        return runtime.query(query);
+    }
+
+    @Override
+    public com.ewitulsk.villagersimulator.api.sim.view.SimViews views() {
+        return runtime.views();
+    }
+
+    @Override
+    public long time() {
+        return runtime.views().time();
+    }
+
+    @Override
+    public com.ewitulsk.villagersimulator.api.mod.ScenarioRegistry scenarios() {
+        return scenarios;
+    }
+
+    @Override
+    public CompletableFuture<com.ewitulsk.villagersimulator.api.sim.scenario.ScenarioResult> runScenario(String name) {
+        var definition = scenarios.find(name);
+        if (definition.isEmpty()) return CompletableFuture.failedFuture(new IllegalArgumentException("No scenario " + name));
+        return CompletableFuture.supplyAsync(
+                () -> com.ewitulsk.villagersimulator.harness.ScenarioRunner.run(definition.get(), newWorld(0)), scenarioThread);
     }
 
     // ------------------------------------------------------------------------------------------------ lifecycle
@@ -116,6 +196,7 @@ public final class SimServer {
     public static synchronized void start(MinecraftServer server) {
         if (instance != null) return;
         instance = new SimServer(server);
+        com.ewitulsk.villagersimulator.api.mod.VillagerSimApi.setServer(instance);
     }
 
     public static void tick(MinecraftServer server) {
@@ -137,6 +218,8 @@ public final class SimServer {
         SimServer s = instance;
         if (s == null) return;
         instance = null;
+        com.ewitulsk.villagersimulator.api.mod.VillagerSimApi.setServer(null);
+        s.scenarioThread.shutdownNow();
         try {
             s.save().get(30, TimeUnit.SECONDS);
         } catch (Exception e) {

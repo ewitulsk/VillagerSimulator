@@ -83,11 +83,11 @@ public final class SocialModule implements SimModule {
         r.function(ExpressionFunction.number("trait", List.of(ExprType.STRING), (env, a) -> {
             FloatField f = Personality.FACETS.get(a.string(0, env));
             return f == null || env.actor().isNone() ? 0 : Personality.get(env.sim(), env.actor(), f);
-        }));
+        }).describe("`trait('kindness')`: a personality trait, 0 to 1."));
         r.function(ExpressionFunction.number("mood", List.of(),
-                (env, a) -> env.actor().isNone() ? 0 : Memories.mood(env.sim(), env.actor())));
-        r.function(ExpressionFunction.number("friends_here", List.of(), (env, a) -> count(env.sim(), env.actor(), env.venue(), Bonds.FRIEND)));
-        r.function(ExpressionFunction.number("rivals_here", List.of(), (env, a) -> count(env.sim(), env.actor(), env.venue(), Bonds.RIVAL)));
+                (env, a) -> env.actor().isNone() ? 0 : Memories.mood(env.sim(), env.actor())).describe("The actor's mood: the sum of their memories' current effects."));
+        r.function(ExpressionFunction.number("friends_here", List.of(), (env, a) -> count(env.sim(), env.actor(), env.venue(), Bonds.FRIEND)).describe("How many of the actor's friends are at the venue now."));
+        r.function(ExpressionFunction.number("rivals_here", List.of(), (env, a) -> count(env.sim(), env.actor(), env.venue(), Bonds.RIVAL)).describe("How many of the actor's rivals are at the venue now."));
     }
 
     private static int count(SimContext ctx, EntityId actor, EntityId venue, int bond) {

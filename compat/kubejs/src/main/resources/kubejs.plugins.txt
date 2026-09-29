@@ -1,0 +1,1 @@
+com.ewitulsk.villagersimulator.compat.kubejs.VillagerSimKubeJSPlugin

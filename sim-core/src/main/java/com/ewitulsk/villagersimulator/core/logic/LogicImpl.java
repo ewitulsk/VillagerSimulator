@@ -211,28 +211,28 @@ public final class LogicImpl implements Logic {
     private void registerBuiltins() {
         List<ExprType> n1 = List.of(ExprType.NUMBER);
         List<ExprType> n2 = List.of(ExprType.NUMBER, ExprType.NUMBER);
-        function(ExpressionFunction.number("min", n2, (env, a) -> Math.min(a.number(0, env), a.number(1, env))));
-        function(ExpressionFunction.number("max", n2, (env, a) -> Math.max(a.number(0, env), a.number(1, env))));
+        function(ExpressionFunction.number("min", n2, (env, a) -> Math.min(a.number(0, env), a.number(1, env))).describe("The smaller of two numbers."));
+        function(ExpressionFunction.number("max", n2, (env, a) -> Math.max(a.number(0, env), a.number(1, env))).describe("The larger of two numbers."));
         function(ExpressionFunction.number("clamp", List.of(ExprType.NUMBER, ExprType.NUMBER, ExprType.NUMBER),
-                (env, a) -> Math.max(a.number(1, env), Math.min(a.number(2, env), a.number(0, env)))));
-        function(ExpressionFunction.number("abs", n1, (env, a) -> Math.abs(a.number(0, env))));
-        function(ExpressionFunction.number("floor", n1, (env, a) -> Math.floor(a.number(0, env))));
+                (env, a) -> Math.max(a.number(1, env), Math.min(a.number(2, env), a.number(0, env)))).describe("`clamp(x, lo, hi)`: x limited to the range [lo, hi]."));
+        function(ExpressionFunction.number("abs", n1, (env, a) -> Math.abs(a.number(0, env))).describe("Absolute value."));
+        function(ExpressionFunction.number("floor", n1, (env, a) -> Math.floor(a.number(0, env))).describe("Rounds down to a whole number."));
         /* Clock hour with fraction, 0-24 (06:30 is 6.5). */
         function(ExpressionFunction.number("hour", List.of(), (env, a) -> {
             long t = Math.floorMod(env.sim().now(), SimTime.TICKS_PER_DAY);
             return (t / (double) SimTime.TICKS_PER_HOUR + SimTime.DAY_START_HOUR) % 24;
-        }));
-        function(ExpressionFunction.number("day", List.of(), (env, a) -> SimTime.day(env.sim().now())));
+        }).describe("Hour of the sim day as a fraction, 0 to 24 (tick 0 is 06:00)."));
+        function(ExpressionFunction.number("day", List.of(), (env, a) -> SimTime.day(env.sim().now())).describe("Days since the sim started."));
         /* Deterministic: the same actor, venue and time always give the same number in [0, 1). */
         function(ExpressionFunction.number("random", List.of(),
-                (env, a) -> SimRandom.unit(env.actor().raw(), env.venue().raw(), env.sim().now())));
+                (env, a) -> SimRandom.unit(env.actor().raw(), env.venue().raw(), env.sim().now())).describe("A deterministic pseudo-random number in [0, 1) for this actor, venue and time."));
         function(ExpressionFunction.number("stat", List.of(ExprType.STRING), (env, a) -> {
             if (env.actor().isNone()) return 0;
             String name = a.string(0, env);
             return env.sim().stats().value(env.actor(), name.indexOf(':') < 0 ? core(name) : Id.parse(name));
-        }));
-        function(ExpressionFunction.bool("has_actor", List.of(), (env, a) -> !env.actor().isNone()));
-        function(ExpressionFunction.bool("has_venue", List.of(), (env, a) -> !env.venue().isNone()));
+        }).describe("`stat('id')`: the actor's value of a stat, after modifiers."));
+        function(ExpressionFunction.bool("has_actor", List.of(), (env, a) -> !env.actor().isNone()).describe("True when the expression has an actor (a villager or player)."));
+        function(ExpressionFunction.bool("has_venue", List.of(), (env, a) -> !env.venue().isNone()).describe("True when the expression has a venue (a building)."));
 
         condition(core("expr"), (obj, logic) -> {
             Expression e = logic.expression(string(obj, "value"), ExprType.BOOL);

@@ -1,0 +1,31 @@
+// Optional KubeJS integration (docs/ARCHITECTURE.md §10): packed into the mod jar, loaded by KubeJS through
+// kubejs.plugins.txt only when KubeJS is installed. Uses the public APIs only.
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+    version = project.neo_version
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+}
+
+repositories {
+    maven {
+        name = 'KubeJS'
+        url = 'https://maven.latvian.dev/releases'
+        content { includeGroup('dev.latvian.mods') }
+    }
+}
+
+dependencies {
+    compileOnly project(':sim-api')
+    compileOnly project(':mod-api')
+    compileOnly "dev.latvian.mods:kubejs-neoforge:${kubejs_version}"
+    compileOnly "dev.latvian.mods:rhino:${rhino_version}"
+}

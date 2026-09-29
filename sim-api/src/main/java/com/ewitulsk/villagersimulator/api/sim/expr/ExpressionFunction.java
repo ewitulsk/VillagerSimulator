@@ -7,7 +7,16 @@ import java.util.List;
  * usable in every expression (docs/ARCHITECTURE.md §9.3). Implementations receive their arguments unevaluated
  * ({@link Args}) so the language stays allocation-free.
  */
-public record ExpressionFunction(String name, List<ExprType> params, ExprType result, Impl impl) {
+public record ExpressionFunction(String name, List<ExprType> params, ExprType result, Impl impl, String description) {
+
+    public ExpressionFunction(String name, List<ExprType> params, ExprType result, Impl impl) {
+        this(name, params, result, impl, "");
+    }
+
+    /** The same function with a description for the generated reference ({@code docs/EXPRESSIONS.md}). */
+    public ExpressionFunction describe(String text) {
+        return new ExpressionFunction(name, params, result, impl, text);
+    }
 
     public interface Impl {
         default double number(ExprEnv env, Args args) {

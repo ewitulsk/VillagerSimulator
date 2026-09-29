@@ -4,7 +4,7 @@ A NeoForge 1.21.1 mod: a village simulation engine aiming at a million villagers
 
 - [docs/DESIGN.md](docs/DESIGN.md): what the game is
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it's built
-- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village), Phase 4 (Villagers With a Face), Phase 5 (Districts & Seamless Tiers), Phase 6 (Scale Gate).**
+- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village), Phase 4 (Villagers With a Face), Phase 5 (Districts & Seamless Tiers), Phase 6 (Scale Gate), Phase 7 (Modding Surface v1).**
 
 ## Project layout
 
@@ -14,6 +14,9 @@ A NeoForge 1.21.1 mod: a village simulation engine aiming at a million villagers
 | `sim-core` | The engine: storage, event scheduler, runtime thread, SQLite persistence |
 | `sim-content` | Base game modules (needs, buildings, villages, plans), built only on `sim-api` |
 | `sim-harness` | Headless scenario DSL; scenario tests run in virtual time |
+| `mod-api` | Public Minecraft-side addon API: modules, sim events, embodied behaviours, animation keys, point blocks, dialogue panels, scenarios |
+| `compat/kubejs` | Optional KubeJS integration (loaded only when KubeJS is installed) |
+| `examples/fountain` | The reference addon, built against the public APIs only |
 | `sim-bench` | The 1M-villager scale benchmark and JMH micro-benchmarks ([docs/SCALE.md](docs/SCALE.md)) |
 | `neoforge` | The mod: bridge, villager puppets, blueprints, `/vs` commands, GameTests |
 | `tools/blueprints` | Structure Lab scripts that generate the blueprints and their building-type JSON |
@@ -30,13 +33,25 @@ Runs the unit and scenario tests (headless, seconds) and builds `neoforge/build/
 ./gradlew :neoforge:runGameTestServer
 ```
 
-Runs the GameTests. Pick namespaces with `-PvsGameTestNamespaces=villagersimulator_bridge` (or `villagersimulator_time`).
+Runs the GameTests, including the reference addon's. Pick namespaces with `-PvsGameTestNamespaces=villagersimulator_bridge` (or `villagersimulator_time`).
 
 ```bash
 ./gradlew checkDependencyRules
 ```
 
 Checks the project dependency rules from ARCHITECTURE §4.
+
+```bash
+./gradlew apiCompatibility
+```
+
+Checks the public APIs against `api/baseline/` (japicmp). `./gradlew updateApiBaseline` announces a deliberate break.
+
+```bash
+./gradlew :neoforge:runGameTestServer -PvsKubeJS=true
+```
+
+Runs the KubeJS scripting GameTests with KubeJS installed in dev.
 
 Regenerate blueprints after editing `tools/blueprints/blueprints.py`:
 
@@ -80,6 +95,10 @@ In a creative overworld (cheats on):
 Walk more than 48 blocks away and the villagers become abstract (T2) while their days carry on. Come back and they're where their schedule says. The sim is saved in `<world>/villagersimulator/sim.db`.
 
 **Scale.** One million villagers simulate at 0.04% of real time in 763 MB ([docs/SCALE.md](docs/SCALE.md)). `/vs stress <villagers>` adds sim-only towns far away to try it in game, and `/vs profile [reset]` shows the server tick time, villagers per tier, and where the sim spends its time. Benchmarks: `./gradlew :sim-bench:scale` (1M villagers headless) and `./gradlew :sim-bench:jmh`.
+
+**Mod it.** Addons use the public `sim-api` and `mod-api`, and KubeJS scripts get `VillagerSimEvents` and the `VillagerSim` binding: see [docs/MODDING.md](docs/MODDING.md). The reference addon, [`examples/fountain`](examples/fountain), runs alongside the mod in dev: villages get a fountain where villagers make wishes, and the dialogue screen counts them. `/vs scenario list` and `/vs scenario run <name>` run headless scenarios (built-in, addons' or scripts') in a world of their own. Expression functions are listed in [docs/EXPRESSIONS.md](docs/EXPRESSIONS.md).
+
+![The reference addon's dialogue panel](docs/images/phase7-dialogue-panel.png)
 
 **Config** (`config/villagersimulator-common.toml`): `sim.debugTimeScale` speeds up sim time for playtesting; `tiers.t0Radius` sets the embodiment distance, `tiers.t3Radius` the day-batch distance, `sim.workerThreads` the village threads.
 
