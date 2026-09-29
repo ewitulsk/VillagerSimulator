@@ -28,6 +28,18 @@
         1
       ]
     ],
+    "service": [
+      [
+        3,
+        1,
+        4
+      ],
+      [
+        5,
+        1,
+        4
+      ]
+    ],
     "wander": [
       [
         4,
@@ -45,5 +57,29 @@
   },
   "services": [
     "home"
+  ],
+  "advertisements": [
+    {
+      "id": "rest",
+      "activity": "villagersimulator:rest",
+      "point": "service",
+      "duration": "1h",
+      "needs": {
+        "comfort": 40,
+        "energy": 5
+      },
+      "condition": "is_home()"
+    },
+    {
+      "id": "nap",
+      "activity": "villagersimulator:nap",
+      "point": "bed",
+      "duration": "1h",
+      "needs": {
+        "energy": 35,
+        "comfort": 10
+      },
+      "condition": "is_home() && need('energy') < 45"
+    }
   ]
 }

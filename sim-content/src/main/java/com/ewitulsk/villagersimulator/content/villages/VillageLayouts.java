@@ -9,21 +9,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Hand-rolled village layouts for Phase 0. The village planner (Phase 15) replaces these. Shared by the
+ * Hand-rolled village layouts. The village planner (Phase 15) replaces these. Shared by the
  * {@code /vs village spawn} command and headless scenarios, so both build the same village.
  */
 public final class VillageLayouts {
     public static final Id WELL = VS.id("well");
     public static final Id BAKERY = VS.id("bakery");
     public static final Id HOUSE = VS.id("house");
+    public static final Id TAVERN = VS.id("tavern");
+    public static final Id MARKET_STALL = VS.id("market_stall");
     private static final int GAP = 4;
 
     private VillageLayouts() {}
 
     /**
-     * A hamlet around a well at {@code (cx, y, cz)}: the bakery to the east and enough houses for {@code villagers}
-     * spread west, north and south. Placements use {@code y} for every building; in game each is then dropped onto
-     * the terrain.
+     * A hamlet around a well at {@code (cx, y, cz)}: the bakery to the east, the tavern north-east, a market stall
+     * south-east, and enough houses for {@code villagers} spread west, north and south. Placements use {@code y} for
+     * every building; in game each is then dropped onto the terrain.
      */
     public static List<SpawnVillageCommand.Placement> hamlet(SimRegistry<BuildingType> types, int cx, int y, int cz, int villagers) {
         BuildingType well = types.get(WELL);
@@ -34,7 +36,11 @@ public final class VillageLayouts {
         int wellX = cx - well.sizeX() / 2;
         int wellZ = cz - well.sizeZ() / 2;
         out.add(new SpawnVillageCommand.Placement(WELL, wellX, y, wellZ));
-        out.add(new SpawnVillageCommand.Placement(BAKERY, wellX + well.sizeX() + GAP, y, cz - bakery.sizeZ() / 2));
+        int bakeryX = wellX + well.sizeX() + GAP;
+        out.add(new SpawnVillageCommand.Placement(BAKERY, bakeryX, y, cz - bakery.sizeZ() / 2));
+        BuildingType tavern = types.get(TAVERN);
+        out.add(new SpawnVillageCommand.Placement(TAVERN, bakeryX, y, cz - bakery.sizeZ() / 2 - GAP - tavern.sizeZ()));
+        out.add(new SpawnVillageCommand.Placement(MARKET_STALL, bakeryX + 2, y, cz + bakery.sizeZ() / 2 + GAP + 1));
 
         int houses = Math.max(1, (villagers + house.beds() - 1) / Math.max(1, house.beds()));
         // Candidate slots: west, north, south, then further out.

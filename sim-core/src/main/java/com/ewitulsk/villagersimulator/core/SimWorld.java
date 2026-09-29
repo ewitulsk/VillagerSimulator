@@ -18,6 +18,15 @@ import com.ewitulsk.villagersimulator.api.sim.event.EventRecord;
 import com.ewitulsk.villagersimulator.api.sim.event.SimEvent;
 import com.ewitulsk.villagersimulator.api.sim.module.SimModule;
 import com.ewitulsk.villagersimulator.api.sim.module.SimRegistrar;
+import com.ewitulsk.villagersimulator.api.sim.module.Validator;
+import com.ewitulsk.villagersimulator.api.sim.core.DataReloaded;
+import com.ewitulsk.villagersimulator.api.sim.expr.ExpressionFunction;
+import com.ewitulsk.villagersimulator.api.sim.logic.Logic;
+import com.ewitulsk.villagersimulator.api.sim.logic.LogicFactories;
+import com.ewitulsk.villagersimulator.api.sim.stat.StatType;
+import com.ewitulsk.villagersimulator.api.sim.stat.Stats;
+import com.ewitulsk.villagersimulator.core.logic.LogicImpl;
+import com.ewitulsk.villagersimulator.core.logic.StatsImpl;
 import com.ewitulsk.villagersimulator.api.sim.registry.RegistryKey;
 import com.ewitulsk.villagersimulator.api.sim.registry.SimRegistry;
 import com.ewitulsk.villagersimulator.api.sim.task.TaskType;
@@ -57,7 +66,12 @@ public final class SimWorld implements SimContext {
     private final Map<SparseComponent<?>, SparseStore<?>> sparseByComponent = new IdentityHashMap<>();
     final Map<Id, TaskType> tasks = new LinkedHashMap<>();
     private final Map<Id, Activity> activities = new LinkedHashMap<>();
-    private final Map<Id, SimRegistry<?>> registries = new LinkedHashMap<>();
+    private final Map<Id, SimRegistryImpl<?>> registries = new LinkedHashMap<>();
+    private final Map<Id, RegistryKey<?>> registryKeys = new LinkedHashMap<>();
+    private final LogicImpl logic = new LogicImpl();
+    private final StatsImpl stats = new StatsImpl(this);
+    private final List<Validator> validators = new ArrayList<>();
+    private final List<String> problems = new ArrayList<>();
     private final Map<Class<?>, List<EventHandler<?>>> handlers = new HashMap<>();
     private final Map<ViewKey<?>, ViewProvider<?>> views = new LinkedHashMap<>();
     final EntityAllocator entities = new EntityAllocator();
@@ -65,7 +79,7 @@ public final class SimWorld implements SimContext {
     final SimEventLog eventLog = new SimEventLog(this::now);
     /** Sections of a loaded save that no registered component claims (e.g. a removed addon); written back as-is. */
     final Map<Id, byte[]> unknownSections = new LinkedHashMap<>();
-    private final DataSource data;
+    private DataSource data;
     private long now;
 
     private SimWorld(List<SimModule> modules, DataSource data) {
@@ -139,7 +153,47 @@ public final class SimWorld implements SimContext {
     private void registerAll() {
         Registrar r = new Registrar();
         r.component(CoreComponents.TIER);
+        r.component(StatsImpl.MODIFIERS);
         for (SimModule m : modules) m.register(r);
+        validate();
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> void reloadRegistry(RegistryKey<T> key, DataSource source) {
+        SimRegistryImpl<T> fresh = SimRegistryImpl.parse(key, source.load(key.folder()), problems::add);
+        registries.put(key.id(), fresh.keepingMissingFrom((SimRegistryImpl<T>) registries.get(key.id()), problems::add));
+    }
+
+    private void validate() {
+        for (Validator v : validators) {
+            try {
+                v.validate(this, problems::add);
+            } catch (RuntimeException e) {
+                problems.add("Validator failed: " + e);
+            }
+        }
+    }
+
+    /**
+     * Problems found in data (bad definitions, expressions that do not compile). Bad data is skipped rather than
+     * crashing the sim; this list says what was skipped.
+     */
+    public List<String> problems() {
+        return List.copyOf(problems);
+    }
+
+    /**
+     * Re-reads every registry from {@code source} ({@code /reload}). Definitions still used by the world but missing
+     * from the new data are kept. Compiled logic is recompiled lazily, validators run again, and
+     * {@link DataReloaded} is published.
+     */
+    public void reloadData(DataSource source) {
+        this.data = source;
+        problems.clear();
+        for (RegistryKey<?> key : registryKeys.values()) reloadRegistry(key, source);
+        logic.clearCaches();
+        validate();
+        publish(new DataReloaded());
     }
 
     private final class Registrar implements SimRegistrar {
@@ -172,7 +226,8 @@ public final class SimWorld implements SimContext {
         @Override
         public <T> void registry(RegistryKey<T> key) {
             if (registries.containsKey(key.id())) throw new IllegalArgumentException("Duplicate registry " + key.id());
-            registries.put(key.id(), SimRegistryImpl.parse(key, data.load(key.folder())));
+            registries.put(key.id(), SimRegistryImpl.parse(key, data.load(key.folder()), problems::add));
+            registryKeys.put(key.id(), key);
         }
 
         @Override
@@ -190,6 +245,31 @@ public final class SimWorld implements SimContext {
         @Override
         public <T> void view(ViewKey<T> key, ViewProvider<T> provider) {
             if (views.putIfAbsent(key, provider) != null) throw new IllegalArgumentException("Duplicate view " + key.id());
+        }
+
+        @Override
+        public void function(ExpressionFunction function) {
+            logic.function(function);
+        }
+
+        @Override
+        public void condition(Id type, LogicFactories.ConditionFactory factory) {
+            logic.condition(type, factory);
+        }
+
+        @Override
+        public void effect(Id type, LogicFactories.EffectFactory factory) {
+            logic.effect(type, factory);
+        }
+
+        @Override
+        public void stat(StatType stat) {
+            stats.register(stat);
+        }
+
+        @Override
+        public void validator(Validator validator) {
+            validators.add(validator);
         }
     }
 
@@ -406,6 +486,20 @@ public final class SimWorld implements SimContext {
         Activity a = activities.get(id);
         if (a == null) throw new IllegalArgumentException("No activity " + id);
         return a;
+    }
+
+    public boolean hasActivity(Id id) {
+        return activities.containsKey(id);
+    }
+
+    @Override
+    public Logic logic() {
+        return logic;
+    }
+
+    @Override
+    public Stats stats() {
+        return stats;
     }
 
     // ------------------------------------------------------------------------------------------------ state

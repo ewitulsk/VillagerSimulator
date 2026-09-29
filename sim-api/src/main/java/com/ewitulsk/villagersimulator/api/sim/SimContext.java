@@ -8,8 +8,10 @@ import com.ewitulsk.villagersimulator.api.sim.component.LongField;
 import com.ewitulsk.villagersimulator.api.sim.component.SparseComponent;
 import com.ewitulsk.villagersimulator.api.sim.event.EventLog;
 import com.ewitulsk.villagersimulator.api.sim.event.SimEvent;
+import com.ewitulsk.villagersimulator.api.sim.logic.Logic;
 import com.ewitulsk.villagersimulator.api.sim.registry.RegistryKey;
 import com.ewitulsk.villagersimulator.api.sim.registry.SimRegistry;
+import com.ewitulsk.villagersimulator.api.sim.stat.Stats;
 import com.ewitulsk.villagersimulator.api.sim.task.TaskType;
 
 import java.util.List;
@@ -85,4 +87,10 @@ public interface SimContext {
 
     /** @throws IllegalArgumentException if no module registered {@code id} */
     Activity activity(Id id);
+
+    // --- data-driven logic ---
+
+    Logic logic();
+
+    Stats stats();
 }

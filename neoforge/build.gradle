@@ -19,7 +19,7 @@ def prop = { String name -> providers.gradleProperty(name) }
 
 // GameTest namespaces. NeoForge 1.21.1 selects GameTests by namespace (see ../ModTesting.md), so each area gets
 // one. Every namespace needs an `empty` template, generated below.
-def testNamespaces = ['villagersimulator_bridge', 'villagersimulator_time']
+def testNamespaces = ['villagersimulator_bridge', 'villagersimulator_time', 'villagersimulator_data']
 
 neoForge {
     version = project.neo_version

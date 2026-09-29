@@ -67,6 +67,9 @@ public final class VsCommands {
                         .then(tierLiteral("t0", Tier.T0)).then(tierLiteral("t1", Tier.T1))
                         .then(tierLiteral("t2", Tier.T2)).then(tierLiteral("t3", Tier.T3))
                         .then(Commands.literal("auto").executes(c -> forceTier(c, null))))))
+                .then(Commands.literal("expr").then(Commands.literal("eval").then(
+                        Commands.argument("expression", StringArgumentType.greedyString()).executes(VsCommands::evalExpression))))
+                .then(Commands.literal("problems").executes(VsCommands::problems))
                 .then(Commands.literal("save").executes(VsCommands::save)));
     }
 
@@ -148,6 +151,32 @@ public final class VsCommands {
         sim().runtime().submit(new ForceTierCommand(List.of(), tier));
         c.getSource().sendSuccess(() -> Component.literal(tier == null ? "Tiers follow players again" : "All villagers forced to " + tier), true);
         return 1;
+    }
+
+    /** Evaluates an expression with the nearest villager (if any) as the actor. */
+    private static int evalExpression(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        String source = StringArgumentType.getString(c, "expression");
+        EntityId actor = EntityId.NONE;
+        try {
+            if (nearestVillager(c.getSource()) instanceof SimVillagerEntity v) actor = new EntityId(v.handle());
+        } catch (CommandSyntaxException none) {
+            // no villager nearby: evaluate without an actor
+        }
+        EntityId who = actor;
+        return reply(c, sim().runtime().query(ctx -> {
+            try {
+                var e = ctx.logic().expression(source, null);
+                double[] pos = who.isNone() ? null : com.ewitulsk.villagersimulator.content.plans.Plans.positionNow(ctx, who);
+                Object value = e.value(com.ewitulsk.villagersimulator.api.sim.expr.ExprEnv.of(ctx, who, EntityId.NONE, pos));
+                return List.of("= " + value + " (" + e.type().displayName() + (who.isNone() ? "" : ", actor " + who) + ")");
+            } catch (com.ewitulsk.villagersimulator.api.sim.expr.ExpressionException ex) {
+                return List.of("Error" + (ex.position() >= 0 ? " at column " + (ex.position() + 1) : "") + ": " + ex.getMessage());
+            }
+        }));
+    }
+
+    private static int problems(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        return reply(c, sim().runtime().queryWorld(w -> w.problems().isEmpty() ? List.of("No data problems") : w.problems()));
     }
 
     private static int save(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {

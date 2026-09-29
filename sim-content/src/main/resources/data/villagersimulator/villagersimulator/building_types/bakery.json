@@ -80,5 +80,21 @@
   ],
   "initial_stock": {
     "bread": 12
-  }
+  },
+  "advertisements": [
+    {
+      "id": "eat",
+      "activity": "villagersimulator:eat",
+      "point": "service",
+      "duration": "30m",
+      "needs": {
+        "hunger": 55,
+        "comfort": 5
+      },
+      "consumes": {
+        "bread": 1
+      },
+      "condition": "hour() >= 6 && hour() < 22"
+    }
+  ]
 }

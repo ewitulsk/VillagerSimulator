@@ -25,9 +25,11 @@ import java.util.Optional;
  * @param size         blueprint size {@code [x, y, z]}
  * @param services     what visitors can do here: {@code eat}, {@code gather}
  * @param initialStock goods the building starts with
+ * @param advertisements what the building offers visitors ({@link Advertisement})
  */
 public record BuildingType(Id blueprint, List<Integer> size, Map<String, List<List<Integer>>> points,
-                           Optional<Job> job, List<String> services, Map<String, Integer> initialStock) {
+                           Optional<Job> job, List<String> services, Map<String, Integer> initialStock,
+                           List<Advertisement> advertisements) {
 
     /** A job at this building: {@code slots} workers doing {@code activity}. */
     public record Job(Id id, int slots, Id activity) {
@@ -44,7 +46,8 @@ public record BuildingType(Id blueprint, List<Integer> size, Map<String, List<Li
             Codec.unboundedMap(Codec.STRING, Codec.INT.listOf().listOf()).fieldOf("points").forGetter(BuildingType::points),
             Job.CODEC.optionalFieldOf("job").forGetter(BuildingType::job),
             Codec.STRING.listOf().optionalFieldOf("services", List.of()).forGetter(BuildingType::services),
-            Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("initial_stock", Map.of()).forGetter(BuildingType::initialStock)
+            Codec.unboundedMap(Codec.STRING, Codec.INT).optionalFieldOf("initial_stock", Map.of()).forGetter(BuildingType::initialStock),
+            Advertisement.CODEC.listOf().optionalFieldOf("advertisements", List.of()).forGetter(BuildingType::advertisements)
     ).apply(i, BuildingType::new));
 
     public static final RegistryKey<BuildingType> REGISTRY = new RegistryKey<>(VS.id("building_type"), "building_types", CODEC);
@@ -57,6 +60,11 @@ public record BuildingType(Id blueprint, List<Integer> size, Map<String, List<Li
 
     public List<List<Integer>> points(String kind) {
         return points.getOrDefault(kind, List.of());
+    }
+
+    public Optional<Advertisement> advertisement(String id) {
+        for (Advertisement a : advertisements) if (a.id().equals(id)) return Optional.of(a);
+        return Optional.empty();
     }
 
     public int beds() {

@@ -78,7 +78,7 @@ public record SpawnVillageCommand(String name, long seed, int centerX, int cente
                     vSeed));
             ctx.add(v, CoreComponents.TIER);
             ctx.set(v, CoreComponents.TIER_CURRENT, Tier.T2.ordinal());
-            Needs.init(ctx, v, 70 + (float) (SimRandom.unit(vSeed, 1) * 20), 70 + (float) (SimRandom.unit(vSeed, 2) * 20));
+            Needs.init(ctx, v, vSeed);
             residents.add(v);
         }
 

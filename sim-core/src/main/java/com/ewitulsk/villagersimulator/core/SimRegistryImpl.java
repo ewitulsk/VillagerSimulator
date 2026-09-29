@@ -23,15 +23,27 @@ final class SimRegistryImpl<T> implements SimRegistry<T> {
         this.entries = Collections.unmodifiableMap(entries);
     }
 
-    static <T> SimRegistryImpl<T> parse(RegistryKey<T> key, Map<Id, JsonElement> json) {
+    /** Parses every definition; bad ones are skipped and reported to {@code problems}. */
+    static <T> SimRegistryImpl<T> parse(RegistryKey<T> key, Map<Id, JsonElement> json, java.util.function.Consumer<String> problems) {
         Map<Id, T> entries = new TreeMap<>();
         json.forEach((id, element) -> {
             DataResult<T> result = key.codec().parse(JsonOps.INSTANCE, element);
-            T value = result.result().orElseThrow(() -> new IllegalArgumentException(
+            result.result().ifPresentOrElse(value -> entries.put(id, value), () -> problems.accept(
                     "Bad " + key.id() + " definition " + id + ": " + result.error().map(e -> e.message()).orElse("?")));
-            entries.put(id, value);
         });
         return new SimRegistryImpl<>(key, entries);
+    }
+
+    /** This registry's entries plus any of {@code previous}'s that are missing here (still in use by the world). */
+    SimRegistryImpl<T> keepingMissingFrom(SimRegistryImpl<T> previous, java.util.function.Consumer<String> problems) {
+        Map<Id, T> merged = new TreeMap<>(entries);
+        previous.entries.forEach((id, value) -> {
+            if (!merged.containsKey(id)) {
+                problems.accept(key.id() + " " + id + " disappeared on reload; keeping the old definition until restart");
+                merged.put(id, value);
+            }
+        });
+        return new SimRegistryImpl<>(key, merged);
     }
 
     @Override

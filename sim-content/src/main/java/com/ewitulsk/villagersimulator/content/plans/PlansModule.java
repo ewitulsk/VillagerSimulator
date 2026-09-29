@@ -37,6 +37,7 @@ public final class PlansModule implements SimModule {
     public void register(SimRegistrar r) {
         r.component(Plans.PLAN);
         r.component(Plans.CURSOR);
+        r.component(Plans.POSITION);
         r.task(Plans.ADVANCE);
         BasicActivities.all().forEach(r::activity);
         r.subscribe(VillagerCreated.class, (ctx, e) -> Plans.start(ctx, e.villager()));

@@ -78,5 +78,35 @@
   },
   "services": [
     "gather"
+  ],
+  "advertisements": [
+    {
+      "id": "gather",
+      "activity": "villagersimulator:socialize",
+      "point": "wander",
+      "duration": "1h",
+      "needs": {
+        "social": 20,
+        "fun": 5
+      }
+    },
+    {
+      "id": "wash",
+      "activity": "villagersimulator:wash",
+      "point": "wander",
+      "duration": "20m",
+      "needs": {
+        "hygiene": 60
+      },
+      "effects": [
+        {
+          "type": "add_modifier",
+          "stat": "hygiene_decay",
+          "mult": -0.5,
+          "duration": "6h",
+          "source": "villagersimulator:washed"
+        }
+      ]
+    }
   ]
 }

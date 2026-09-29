@@ -2,6 +2,8 @@ package com.ewitulsk.villagersimulator.content.buildings;
 
 import com.ewitulsk.villagersimulator.api.sim.EntityId;
 import com.ewitulsk.villagersimulator.api.sim.SimContext;
+import com.ewitulsk.villagersimulator.api.sim.component.DenseComponent;
+import com.ewitulsk.villagersimulator.api.sim.component.IntField;
 import com.ewitulsk.villagersimulator.api.sim.component.SparseComponent;
 import com.ewitulsk.villagersimulator.content.VS;
 
@@ -11,6 +13,9 @@ import java.util.List;
 public final class Buildings {
     public static final SparseComponent<Building> BUILDING = new SparseComponent<>(VS.id("building"), 1, Building.CODEC);
     public static final SparseComponent<Stock> STOCK = new SparseComponent<>(VS.id("stock"), 1, Stock.CODEC);
+    /** How often each building's advertisements were chosen. */
+    public static final DenseComponent USAGE = new DenseComponent(VS.id("building_usage"), 1);
+    public static final IntField VISITS = USAGE.intField("visits");
 
     public static final String BREAD = "bread";
     /** Bakers stop baking once the bakery holds this much bread. */
@@ -33,6 +38,22 @@ public final class Buildings {
         }
         List<Integer> p = points.get(Math.floorMod(index, points.size()));
         return new double[]{b.x() + p.get(0) + 0.5, b.y() + p.get(1), b.z() + p.get(2) + 0.5};
+    }
+
+    /** Centre of the building footprint at standing height. */
+    public static double[] centre(SimContext ctx, EntityId building) {
+        Building b = ctx.get(building, BUILDING);
+        BuildingType t = type(ctx, building);
+        return new double[]{b.x() + t.sizeX() / 2.0, b.y() + 1, b.z() + t.sizeZ() / 2.0};
+    }
+
+    public static int visits(SimContext ctx, EntityId building) {
+        return ctx.has(building, USAGE) ? ctx.get(building, VISITS) : 0;
+    }
+
+    public static void visited(SimContext ctx, EntityId building) {
+        if (!ctx.has(building, USAGE)) ctx.add(building, USAGE);
+        ctx.set(building, VISITS, ctx.get(building, VISITS) + 1);
     }
 
     public static int pointCount(SimContext ctx, EntityId building, String kind) {

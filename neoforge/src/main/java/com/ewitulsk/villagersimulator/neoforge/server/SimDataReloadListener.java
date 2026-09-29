@@ -19,8 +19,8 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Reads sim data definitions from datapacks: {@code data/<ns>/villagersimulator/<folder>/<path>.json}. Registries
- * freeze when the sim starts, so a {@code /reload} while running only takes effect after a restart.
+ * Reads sim data definitions from datapacks: {@code data/<ns>/villagersimulator/<folder>/<path>.json}. On
+ * {@code /reload} the running sim re-reads its registries (component schemas still need a restart).
  */
 public final class SimDataReloadListener extends SimplePreparableReloadListener<Map<String, Map<Id, JsonElement>>> {
     private static final Logger LOG = LoggerFactory.getLogger("VillagerSim/Data");
@@ -52,9 +52,10 @@ public final class SimDataReloadListener extends SimplePreparableReloadListener<
 
     @Override
     protected void apply(Map<String, Map<Id, JsonElement>> data, ResourceManager manager, ProfilerFiller profiler) {
-        boolean running = SimServer.get() != null;
         latest = Map.copyOf(data);
         int count = data.values().stream().mapToInt(Map::size).sum();
-        LOG.info("Loaded {} sim data definitions{}", count, running ? " (takes effect after a restart)" : "");
+        LOG.info("Loaded {} sim data definitions", count);
+        SimServer running = SimServer.get();
+        if (running != null) running.reload(current());
     }
 }

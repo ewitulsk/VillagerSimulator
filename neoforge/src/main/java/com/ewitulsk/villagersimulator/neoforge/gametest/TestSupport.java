@@ -38,6 +38,8 @@ final class TestSupport {
         List<SpawnVillageCommand.Placement> placements = new ArrayList<>();
         placements.add(new SpawnVillageCommand.Placement(VillageLayouts.WELL, o.getX(), o.getY(), o.getZ()));
         placements.add(new SpawnVillageCommand.Placement(VillageLayouts.BAKERY, o.getX(), o.getY(), o.getZ()));
+        placements.add(new SpawnVillageCommand.Placement(VillageLayouts.TAVERN, o.getX(), o.getY(), o.getZ()));
+        placements.add(new SpawnVillageCommand.Placement(VillageLayouts.MARKET_STALL, o.getX(), o.getY(), o.getZ()));
         for (int i = 0; i < Math.max(1, (villagers + 3) / 4); i++) {
             placements.add(new SpawnVillageCommand.Placement(VillageLayouts.HOUSE, o.getX(), o.getY(), o.getZ()));
         }

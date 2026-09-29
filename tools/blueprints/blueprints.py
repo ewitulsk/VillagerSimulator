@@ -1,4 +1,4 @@
-"""Phase 0 blueprints: house, bakery, well.
+"""Blueprints: house, bakery, well (Phase 0), tavern and market stall (Phase 1).
 
 Builds each structure with Structure Lab's builder (D:/MinecraftMods/MinecraftStructureInjector) and writes:
   - neoforge/src/main/resources/data/villagersimulator/structure/<name>.nbt          (the blueprint)
@@ -6,7 +6,7 @@ Builds each structure with Structure Lab's builder (D:/MinecraftMods/MinecraftSt
     (the building type, with points taken from the same script so they always match the blocks)
 
 Run with Structure Lab's venv:
-  D:/MinecraftMods/MinecraftStructureInjector/.venv/Scripts/python.exe tools/blueprints/phase0.py
+  D:/MinecraftMods/MinecraftStructureInjector/.venv/Scripts/python.exe tools/blueprints/blueprints.py
 
 Conventions (docs/ARCHITECTURE.md §13.1): y=0 is the floor layer, placed so it replaces the top ground block; people
 stand at y=1. Points are block positions relative to the blueprint origin (min corner).
@@ -75,12 +75,21 @@ def house() -> tuple[Structure, dict]:
     beds = [bed(s, x, 1, 1) for x in (1, 3, 5, 7)]
     s.set((4, 3, 3), "lantern", {"hanging": True, "waterlogged": False})
     s.set((7, 1, 5), "barrel", {"facing": "up", "open": False})
+    # A table with two chairs by the door.
+    s.set((4, 1, 4), "oak_fence", {"north": False, "south": False, "east": False, "west": False, "waterlogged": False})
+    s.set((4, 2, 4), "oak_pressure_plate", {"powered": False})
     anchor = [1, 0, 5]
     s.set(tuple(anchor), ANCHOR)
     return s, {
         "size": [sx, sy, sz],
-        "points": {"bed": beds, "wander": [[4, 1, sz]], "anchor": [anchor]},
+        "points": {"bed": beds, "service": [[3, 1, 4], [5, 1, 4]], "wander": [[4, 1, sz]], "anchor": [anchor]},
         "services": ["home"],
+        "advertisements": [
+            {"id": "rest", "activity": "villagersimulator:rest", "point": "service", "duration": "1h",
+             "needs": {"comfort": 40, "energy": 5}, "condition": "is_home()"},
+            {"id": "nap", "activity": "villagersimulator:nap", "point": "bed", "duration": "1h",
+             "needs": {"energy": 35, "comfort": 10}, "condition": "is_home() && need('energy') < 45"},
+        ],
     }
 
 
@@ -115,6 +124,11 @@ def bakery() -> tuple[Structure, dict]:
         "job": {"id": "villagersimulator:baker", "slots": 3, "activity": "villagersimulator:bake"},
         "services": ["eat"],
         "initial_stock": {"bread": 12},
+        "advertisements": [
+            {"id": "eat", "activity": "villagersimulator:eat", "point": "service", "duration": "30m",
+             "needs": {"hunger": 55, "comfort": 5}, "consumes": {"bread": 1},
+             "condition": "hour() >= 6 && hour() < 22"},
+        ],
     }
 
 
@@ -141,13 +155,85 @@ def well() -> tuple[Structure, dict]:
         "size": [sx, sy, sz],
         "points": {"wander": wander, "anchor": [anchor]},
         "services": ["gather"],
+        "advertisements": [
+            {"id": "gather", "activity": "villagersimulator:socialize", "point": "wander", "duration": "1h",
+             "needs": {"social": 20, "fun": 5}},
+            {"id": "wash", "activity": "villagersimulator:wash", "point": "wander", "duration": "20m",
+             "needs": {"hygiene": 60},
+             "effects": [{"type": "add_modifier", "stat": "hygiene_decay", "mult": -0.5, "duration": "6h",
+                          "source": "villagersimulator:washed"}]},
+        ],
+    }
+
+
+def tavern() -> tuple[Structure, dict]:
+    sx, sy, sz = 11, 6, 9
+    s = Structure((sx, sy, sz))
+    s.fill((0, 0, 0), (sx - 1, 0, sz - 1), "cobblestone")
+    s.fill((1, 0, 1), (sx - 2, 0, sz - 2), "dark_oak_planks")
+    walls(s, sx, sz, 1, 3, "spruce_planks", "dark_oak_log")
+    roof(s, sx, sz, 4, "dark_oak_planks", "dark_oak_slab")
+    door(s, 5, 1, sz - 1, "north")
+    for z in (3, 6):
+        s.set((0, 2, z), "glass_pane")
+        s.set((sx - 1, 2, z), "glass_pane")
+    # Bar along the north wall with barrels behind it.
+    for x in range(2, 9):
+        s.set((x, 1, 2), "spruce_slab", {"type": "top", "waterlogged": False})
+    for x in (2, 4, 6, 8):
+        s.set((x, 1, 1), "barrel", {"facing": "south", "open": False})
+    # Two tables.
+    for x in (3, 7):
+        s.set((x, 1, 5), "oak_fence", {"north": False, "south": False, "east": False, "west": False, "waterlogged": False})
+        s.set((x, 2, 5), "oak_pressure_plate", {"powered": False})
+    for x in (3, 5, 7):
+        s.set((x, 3, 4), "lantern", {"hanging": True, "waterlogged": False})
+    anchor = [9, 0, 7]
+    s.set(tuple(anchor), ANCHOR)
+    service = [[2, 1, 3], [4, 1, 3], [6, 1, 3], [8, 1, 3], [2, 1, 5], [4, 1, 5], [6, 1, 5], [8, 1, 5],
+               [3, 1, 6], [7, 1, 6]]
+    return s, {
+        "size": [sx, sy, sz],
+        "points": {"service": service, "wander": [[5, 1, sz]], "anchor": [anchor]},
+        "services": ["drink"],
+        "advertisements": [
+            {"id": "drink", "activity": "villagersimulator:drink", "point": "service", "duration": "1h",
+             "needs": {"social": 35, "fun": 30, "hunger": 5}, "condition": "hour() >= 11 && hour() < 24"},
+        ],
+    }
+
+
+def market_stall() -> tuple[Structure, dict]:
+    sx, sy, sz = 5, 4, 3
+    s = Structure((sx, sy, sz))
+    s.fill((0, 0, 0), (sx - 1, 0, sz - 1), "gravel")
+    for x in (0, sx - 1):
+        for z in (0, sz - 1):
+            s.set((x, 1, z), "oak_fence", {"north": False, "south": False, "east": False, "west": False, "waterlogged": False})
+            s.set((x, 2, z), "oak_fence", {"north": False, "south": False, "east": False, "west": False, "waterlogged": False})
+    for x in range(sx):
+        for z in range(sz):
+            s.set((x, 3, z), "white_wool" if (x + z) % 2 == 0 else "red_wool")
+    for x in (1, 2, 3):
+        s.set((x, 1, 0), "barrel", {"facing": "up", "open": False})
+    anchor = [2, 0, 2]
+    s.set(tuple(anchor), ANCHOR)
+    return s, {
+        "size": [sx, sy, sz],
+        "points": {"service": [[1, 1, 3], [2, 1, 3], [3, 1, 3]], "wander": [[2, 1, 4]], "anchor": [anchor]},
+        "services": ["browse"],
+        "advertisements": [
+            {"id": "browse", "activity": "villagersimulator:browse", "point": "service", "duration": "45m",
+             "needs": {"fun": 20, "social": 10}, "condition": "hour() >= 8 && hour() < 18"},
+        ],
     }
 
 
 def main() -> None:
     STRUCTURES.mkdir(parents=True, exist_ok=True)
     TYPES.mkdir(parents=True, exist_ok=True)
-    for name, build in (("house", house), ("bakery", bakery), ("well", well)):
+    for name, build in (("house", house), ("bakery", bakery), ("well", well), ("tavern", tavern),
+                        ("market_stall", market_stall)):
         structure, meta = build()
         out = structure.save(STRUCTURES / f"{name}.nbt")
         Path(out["views_path"]).unlink(missing_ok=True)  # no camera views for game blueprints

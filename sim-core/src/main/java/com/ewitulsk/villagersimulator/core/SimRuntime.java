@@ -73,6 +73,24 @@ public final class SimRuntime implements AutoCloseable {
         run(w -> w.apply(command));
     }
 
+    /** Reads engine-level state on the sim thread, e.g. {@link SimWorld#problems()}. */
+    public <T> CompletableFuture<T> queryWorld(java.util.function.Function<SimWorld, T> read) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        run(w -> {
+            try {
+                future.complete(read.apply(w));
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+        return future;
+    }
+
+    /** Runs an engine-level action on the sim thread, e.g. {@link SimWorld#reloadData}. */
+    public void submitWorld(Consumer<SimWorld> action) {
+        run(action);
+    }
+
     public <T> CompletableFuture<T> query(SimQuery<T> query) {
         CompletableFuture<T> future = new CompletableFuture<>();
         run(w -> {

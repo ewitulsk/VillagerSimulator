@@ -9,6 +9,7 @@ import com.ewitulsk.villagersimulator.content.villages.VillageQueries;
 import com.ewitulsk.villagersimulator.neoforge.ModContent;
 import com.ewitulsk.villagersimulator.neoforge.SimVillagerEntity;
 import com.ewitulsk.villagersimulator.neoforge.world.BlueprintPlacer;
+import com.ewitulsk.villagersimulator.neoforge.world.VanillaPoints;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -90,6 +91,30 @@ public final class BridgeGameTests {
             }
         }
         h.succeed();
+    }
+
+    /** Beds and workstations found in the blueprints match the points the building types list explicitly. */
+    @GameTest(template = "empty", batch = BATCH, timeoutTicks = 20)
+    public static void vanillaBedsAndWorkstationsAreDetected(GameTestHelper h) {
+        var types = sim().registry(BuildingType.REGISTRY);
+        var kinds = VanillaPoints.pointBlocks(sim().data());
+        for (var id : List.of(VillageLayouts.HOUSE, VillageLayouts.BAKERY)) {
+            BuildingType type = types.get(id);
+            var template = h.getLevel().getStructureManager().get(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                    type.blueprint().namespace(), type.blueprint().path())).orElseThrow();
+            var detected = VanillaPoints.detect(template, kinds);
+            require(detected.get("bed").equals(sortedPoints(type.points(BuildingType.BED))), id + " beds: " + detected.get("bed"));
+            if (!type.points(BuildingType.WORK).isEmpty()) {
+                require(detected.get("work").equals(sortedPoints(type.points(BuildingType.WORK))), id + " work: " + detected.get("work"));
+            }
+        }
+        h.succeed();
+    }
+
+    private static List<List<Integer>> sortedPoints(List<List<Integer>> points) {
+        List<List<Integer>> out = new java.util.ArrayList<>(points);
+        out.sort(java.util.Comparator.<List<Integer>>comparingInt(p -> p.get(0)).thenComparingInt(p -> p.get(1)).thenComparingInt(p -> p.get(2)));
+        return out;
     }
 
     private static void force(EntityId villager, Tier tier) {

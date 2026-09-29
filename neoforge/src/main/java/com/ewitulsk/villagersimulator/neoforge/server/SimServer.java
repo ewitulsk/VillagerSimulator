@@ -7,6 +7,7 @@ import com.ewitulsk.villagersimulator.core.SimRuntime;
 import com.ewitulsk.villagersimulator.core.SimWorld;
 import com.ewitulsk.villagersimulator.core.persistence.SqliteSimStore;
 import com.ewitulsk.villagersimulator.neoforge.RegisterSimModulesEvent;
+import com.ewitulsk.villagersimulator.neoforge.world.VanillaPoints;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -49,7 +50,7 @@ public final class SimServer {
         RegisterSimModulesEvent event = new RegisterSimModulesEvent();
         ModLoader.postEvent(event);
         this.modules = List.copyOf(event.modules());
-        this.data = SimDataReloadListener.current();
+        this.data = VanillaPoints.augment(server, SimDataReloadListener.current());
 
         ServerLevel overworld = server.overworld();
         Path file = server.getWorldPath(LevelResource.ROOT).resolve("villagersimulator").resolve("sim.db");
@@ -57,11 +58,30 @@ public final class SimServer {
         SimWorld world = newWorld(overworld.getDayTime());
         store.load().ifPresent(saved -> world.restore(saved.data(), saved.events()));
         LOG.info("Sim started: {} modules, {} entities, time {} ({})", modules.size(), world.entityCount(), world.now(), file);
+        logProblems(world.problems());
 
         this.world = world;
         this.runtime = new SimRuntime(world, "VillagerSim");
         this.bridge = new SimBridge(server, runtime);
         runtime.start();
+    }
+
+    private static void logProblems(List<String> problems) {
+        for (String p : problems) LOG.warn("Sim data problem: {}", p);
+    }
+
+    /** Applies reloaded datapack data to the running sim ({@code /reload}). Server thread. */
+    public void reload(com.ewitulsk.villagersimulator.core.data.DataSource raw) {
+        com.ewitulsk.villagersimulator.core.data.DataSource augmented = VanillaPoints.augment(server, raw);
+        runtime.submitWorld(w -> {
+            w.reloadData(augmented);
+            logProblems(w.problems());
+        });
+    }
+
+    /** The data the sim was started with (datapacks plus detected vanilla points). */
+    public com.ewitulsk.villagersimulator.core.data.DataSource data() {
+        return data;
     }
 
     /** A fresh world with this server's modules and data, e.g. to replay a scenario headless in a GameTest. */
