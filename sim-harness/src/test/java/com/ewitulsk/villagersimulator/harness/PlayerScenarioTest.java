@@ -138,8 +138,9 @@ class PlayerScenarioTest {
         String reply = say(s, v, me, Dialogue.INVITE);
         assertTrue(reply.startsWith("I'd love to!"), reply);
         EntityId tavern = building(s, village, "tavern");
+        long meetAt = com.ewitulsk.villagersimulator.content.social.Appointments.of(s.world(), v).get(0).start();
         PlanEntry booked = s.world().get(v, Plans.PLAN).entries().stream()
-                .filter(e -> tavern.equals(e.venue()) && e.ad().isPresent()).findFirst().orElseThrow();
+                .filter(e -> tavern.equals(e.venue()) && e.start() == meetAt).findFirst().orElseThrow();
 
         s.warp(booked.start() - s.now());
         standIn(s, me, tavern);

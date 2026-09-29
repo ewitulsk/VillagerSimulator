@@ -86,7 +86,8 @@ public final class SimServer {
 
     /** A fresh world with this server's modules and data, e.g. to replay a scenario headless in a GameTest. */
     public SimWorld newWorld(long startTime) {
-        return SimWorld.builder().modules(modules).data(data).startTime(startTime).build();
+        return SimWorld.builder().modules(modules).data(data).startTime(startTime)
+                .threads(com.ewitulsk.villagersimulator.neoforge.SimConfig.workerThreads()).build();
     }
 
     /** A frozen data registry. Registries never change after the sim is built, so this is safe on any thread. */
@@ -155,7 +156,7 @@ public final class SimServer {
 
     /** Snapshots on the sim thread, then writes on the save thread. Never blocks the caller. */
     public CompletableFuture<Void> save() {
-        return runtime.snapshot(store.lastSavedEventId())
+        return runtime.snapshot(store.savedEvents())
                 .thenAcceptAsync(snapshot -> store.save(snapshot, SimWorld.SNAPSHOT_FORMAT), saveThread)
                 .whenComplete((ok, error) -> {
                     if (error != null) LOG.error("Sim save failed", error);

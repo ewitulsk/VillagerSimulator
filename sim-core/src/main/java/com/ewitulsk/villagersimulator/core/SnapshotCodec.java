@@ -32,10 +32,13 @@ import java.util.Map;
 final class SnapshotCodec {
     private static final Logger LOG = LoggerFactory.getLogger("VillagerSim/Save");
     private static final int MAGIC = 0x56534D30; // "VSM0"
-    static final int FORMAT = 1;
+    /** 2: per-shard queues and shard assignments. */
+    static final int FORMAT = 2;
     private static final byte DENSE = 1;
     private static final byte SPARSE = 2;
     private static final byte GRAPH = 3;
+    private static final byte SHARDS = 4;
+    private static final Id SHARD_SECTION = Id.of("villagersimulator", "shards");
     private static final Id RELATIONSHIPS = Id.of("villagersimulator", "relationships");
 
     private SnapshotCodec() {}
@@ -47,7 +50,7 @@ final class SnapshotCodec {
             out.writeInt(MAGIC);
             out.writeInt(FORMAT);
             out.writeLong(w.now());
-            out.writeLong(w.scheduler.nextSeq());
+            out.writeLong(0); // per-shard sequence numbers are restored from the tasks themselves
 
             int limit = w.entities.indexLimit();
             out.writeInt(limit);
@@ -60,6 +63,13 @@ final class SnapshotCodec {
             for (int i : free) out.writeInt(i);
 
             List<byte[]> sections = new ArrayList<>();
+            ByteArrayOutputStream shardBytes = new ByteArrayOutputStream();
+            DataOutputStream sb = new DataOutputStream(shardBytes);
+            sb.writeInt(w.queues.size());
+            sb.writeInt(limit);
+            for (int i = 0; i < limit; i++) sb.writeInt(i < w.shardOf.length ? w.shardOf[i] : 0);
+            sb.flush();
+            sections.add(section(SHARD_SECTION, SHARDS, shardBytes.toByteArray()));
             for (DenseStore s : w.dense.values()) sections.add(section(s.component().id(), DENSE, writeDense(s)));
             for (SparseStore<?> s : w.sparse.values()) sections.add(section(s.component().id(), SPARSE, writeSparse(s)));
             ByteArrayOutputStream graph = new ByteArrayOutputStream();
@@ -71,7 +81,8 @@ final class SnapshotCodec {
             out.writeInt(sections.size());
             for (byte[] s : sections) out.write(s);
 
-            List<Scheduler.Task> tasks = w.scheduler.ordered();
+            List<Scheduler.Task> tasks = new ArrayList<>();
+            for (Scheduler q : w.queues) tasks.addAll(q.ordered());
             out.writeInt(tasks.size());
             for (Scheduler.Task t : tasks) {
                 out.writeLong(t.time());
@@ -95,7 +106,7 @@ final class SnapshotCodec {
             int format = in.readInt();
             if (format > FORMAT) throw new IllegalArgumentException("Snapshot format " + format + " is newer than " + FORMAT);
             w.setNow(in.readLong());
-            w.scheduler.setNextSeq(in.readLong());
+            in.readLong(); // format 1's global sequence number; format 2 restores per shard
 
             int limit = in.readInt();
             byte[] generations = new byte[limit];
@@ -118,6 +129,13 @@ final class SnapshotCodec {
                 if (kind == DENSE && w.dense.containsKey(id)) readDense(w.dense.get(id), p);
                 else if (kind == SPARSE && w.sparse.containsKey(id)) readSparse(w.sparse.get(id), p);
                 else if (kind == GRAPH && id.equals(RELATIONSHIPS)) w.relationships.read(p);
+                else if (kind == SHARDS && id.equals(SHARD_SECTION)) {
+                    int count = p.readInt();
+                    int n = p.readInt();
+                    int[] assignment = new int[n];
+                    for (int i = 0; i < n; i++) assignment[i] = p.readInt();
+                    w.restoreShards(count, assignment);
+                }
                 else {
                     LOG.warn("Keeping unknown save section {} (no registered component claims it)", id);
                     w.unknownSections.put(id, section(id, kind, payload));
@@ -138,7 +156,8 @@ final class SnapshotCodec {
                     LOG.warn("Dropping saved task of unknown type {}", type);
                     continue;
                 }
-                w.scheduler.restore(new Scheduler.Task(time, priority, seq, t, target, arg));
+                int shard = target == 0 ? 0 : w.shardIndex(new com.ewitulsk.villagersimulator.api.sim.EntityId(target));
+                w.queues.get(shard).restore(new Scheduler.Task(time, priority, seq, t, target, arg));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -204,9 +223,10 @@ final class SnapshotCodec {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bytes);
         out.writeInt(s.component().version());
-        out.writeInt(s.values().size());
-        for (var e : s.values().int2ObjectEntrySet()) {
-            out.writeInt(e.getIntKey());
+        var entries = s.sorted();
+        out.writeInt(entries.size());
+        for (var e : entries) {
+            out.writeInt(e.getKey());
             writeString(out, SimWorld.encodeJson(s.component(), e.getValue()));
         }
         out.flush();

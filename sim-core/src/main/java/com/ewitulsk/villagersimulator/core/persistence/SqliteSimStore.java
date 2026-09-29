@@ -30,7 +30,7 @@ public final class SqliteSimStore implements AutoCloseable {
     public record Loaded(long time, byte[] data, List<EventRecord> events) {}
 
     private final Connection connection;
-    private volatile long lastSavedEventId;
+    private volatile int savedEvents;
 
     private SqliteSimStore(Connection connection) throws SQLException {
         this.connection = connection;
@@ -41,10 +41,15 @@ public final class SqliteSimStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS event_log (id INTEGER PRIMARY KEY, time INTEGER NOT NULL, "
                     + "type TEXT NOT NULL, actor INTEGER NOT NULL, cause INTEGER NOT NULL, witnesses TEXT NOT NULL, "
                     + "detail TEXT NOT NULL)");
+            try {
+                s.execute("ALTER TABLE event_log ADD COLUMN seq INTEGER NOT NULL DEFAULT 0");
+            } catch (SQLException alreadyThere) {
+                // the column exists
+            }
             s.execute("CREATE INDEX IF NOT EXISTS event_log_type ON event_log (type, time)");
             s.execute("CREATE INDEX IF NOT EXISTS event_log_actor ON event_log (actor, time)");
-            try (ResultSet r = s.executeQuery("SELECT COALESCE(MAX(id), 0) FROM event_log")) {
-                lastSavedEventId = r.next() ? r.getLong(1) : 0;
+            try (ResultSet r = s.executeQuery("SELECT COUNT(*) FROM event_log")) {
+                savedEvents = r.next() ? r.getInt(1) : 0;
             }
         }
         connection.setAutoCommit(false);
@@ -66,9 +71,9 @@ public final class SqliteSimStore implements AutoCloseable {
         }
     }
 
-    /** Id of the newest event record already saved; pass it to {@link SimWorld#snapshot(long)}. */
-    public long lastSavedEventId() {
-        return lastSavedEventId;
+    /** How many event records are saved; pass it to {@link SimWorld#snapshot(int)}. */
+    public int savedEvents() {
+        return savedEvents;
     }
 
     public void save(SimWorld.Snapshot snapshot, int format) {
@@ -81,8 +86,8 @@ public final class SqliteSimStore implements AutoCloseable {
                 p.executeUpdate();
             }
             try (PreparedStatement p = connection.prepareStatement(
-                    "INSERT OR IGNORE INTO event_log (id, time, type, actor, cause, witnesses, detail) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
-                long max = lastSavedEventId;
+                    "INSERT OR IGNORE INTO event_log (id, time, type, actor, cause, witnesses, detail, seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {
+                int seq = savedEvents;
                 for (EventRecord r : snapshot.newEvents()) {
                     p.setLong(1, r.id());
                     p.setLong(2, r.time());
@@ -91,12 +96,12 @@ public final class SqliteSimStore implements AutoCloseable {
                     p.setLong(5, r.cause());
                     p.setString(6, witnesses(r.witnesses()));
                     p.setString(7, r.detail());
+                    p.setInt(8, ++seq);
                     p.addBatch();
-                    max = Math.max(max, r.id());
                 }
                 p.executeBatch();
                 connection.commit();
-                lastSavedEventId = max;
+                savedEvents = seq;
             }
         } catch (SQLException e) {
             try {
@@ -120,7 +125,7 @@ public final class SqliteSimStore implements AutoCloseable {
             }
             List<EventRecord> events = new ArrayList<>();
             try (Statement s = connection.createStatement();
-                 ResultSet r = s.executeQuery("SELECT id, time, type, actor, cause, witnesses, detail FROM event_log ORDER BY id")) {
+                 ResultSet r = s.executeQuery("SELECT id, time, type, actor, cause, witnesses, detail FROM event_log ORDER BY seq, id")) {
                 while (r.next()) {
                     events.add(new EventRecord(r.getLong(1), r.getLong(2), Id.parse(r.getString(3)),
                             new EntityId(r.getInt(4)), r.getLong(5), parseWitnesses(r.getString(6)), r.getString(7)));

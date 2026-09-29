@@ -19,10 +19,21 @@ public final class StatsImpl implements Stats {
             new SparseComponent<>(Id.of(LogicImpl.NAMESPACE, "modifiers"), 1, Modifier.CODEC.listOf());
 
     private final SimContext ctx;
-    private final Map<Id, StatType> types = new LinkedHashMap<>();
+    private final Map<Id, StatType> types;
+
+    /** Stats read and written through {@code ctx}, so a shard's writes to other shards are deferred. */
+    public StatsImpl(SimContext ctx, Map<Id, StatType> types) {
+        this.ctx = ctx;
+        this.types = types;
+    }
 
     public StatsImpl(SimContext ctx) {
-        this.ctx = ctx;
+        this(ctx, new LinkedHashMap<>());
+    }
+
+    /** The same stat types, used through another context. */
+    public StatsImpl with(SimContext other) {
+        return new StatsImpl(other, types);
     }
 
     public void register(StatType type) {

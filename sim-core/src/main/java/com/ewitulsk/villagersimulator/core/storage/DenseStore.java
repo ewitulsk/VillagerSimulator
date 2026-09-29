@@ -32,7 +32,11 @@ public final class DenseStore {
         return present.get(index);
     }
 
-    public void add(int index) {
+    /**
+     * Adds the component. Synchronized because presence bits share words between entities; values themselves are
+     * per-index, so shards write them in parallel without locks.
+     */
+    public synchronized void add(int index) {
         if (present.get(index)) return;
         ensure(index);
         present.set(index);
@@ -41,8 +45,17 @@ public final class DenseStore {
         for (int[] c : ints) c[index] = 0;
     }
 
-    public void remove(int index) {
+    public synchronized void remove(int index) {
         present.clear(index);
+    }
+
+    /** Grows storage to hold {@code index} (called when an entity is created, at a boundary). */
+    public synchronized void reserve(int index) {
+        ensure(index);
+        if (!present.get(index)) {
+            present.set(index);
+            present.clear(index); // grows the bit set's words now rather than mid-window
+        }
     }
 
     public BitSet present() {

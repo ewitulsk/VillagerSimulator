@@ -35,14 +35,14 @@ class SaveLoadRoundTripTest {
         long hashBefore = original.stateHash();
 
         try (SqliteSimStore store = SqliteSimStore.open(dir.resolve("sim.db"))) {
-            store.save(original.snapshot(store.lastSavedEventId()), SimWorld.SNAPSHOT_FORMAT);
+            store.save(original.snapshot(store.savedEvents()), SimWorld.SNAPSHOT_FORMAT);
         }
 
         SimWorld restored = SimWorld.builder().module(new TestModule()).build();
         try (SqliteSimStore store = SqliteSimStore.open(dir.resolve("sim.db"))) {
             var loaded = store.load().orElseThrow();
             restored.restore(loaded.data(), loaded.events());
-            assertEquals(1, store.lastSavedEventId());
+            assertEquals(1, store.savedEvents());
         }
 
         assertEquals(hashBefore, restored.stateHash(), "restored state matches");
@@ -58,9 +58,9 @@ class SaveLoadRoundTripTest {
     void secondSaveOnlyAppendsNewEvents() {
         SimWorld w = populated();
         try (SqliteSimStore store = SqliteSimStore.open(dir.resolve("sim.db"))) {
-            store.save(w.snapshot(store.lastSavedEventId()), SimWorld.SNAPSHOT_FORMAT);
+            store.save(w.snapshot(store.savedEvents()), SimWorld.SNAPSHOT_FORMAT);
             w.events().record(Id.of("test", "later"), EntityId.NONE, "after first save");
-            var second = w.snapshot(store.lastSavedEventId());
+            var second = w.snapshot(store.savedEvents());
             assertEquals(1, second.newEvents().size());
             store.save(second, SimWorld.SNAPSHOT_FORMAT);
             assertEquals(2, store.load().orElseThrow().events().size());

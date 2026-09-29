@@ -108,6 +108,7 @@ public final class Dialogue {
         @Override
         public void apply(SimContext ctx) {
             reply.accept(choose(ctx, villager, player, option));
+            if (ctx.alive(villager)) PlayersModule.refreshPin(ctx, villager);
         }
     }
 

@@ -52,8 +52,7 @@ public final class TimeGameTests {
                     long[] inGame = result.get();
                     SimWorld headless = sim().newWorld(spawnedAt.get());
                     AtomicReference<EntityId> replayed = new AtomicReference<>();
-                    headless.apply(new SpawnVillageCommand(command.name(), command.seed(), command.centerX(),
-                            command.centerY(), command.centerZ(), command.placements(), command.villagers(), replayed::set));
+                    headless.apply(command.withCallback(replayed::set));
                     headless.advanceTo(inGame[0]);
                     long expected = VillageQueries.fingerprint(headless, replayed.get());
                     require(expected == inGame[1], "in-game village matches headless replay");

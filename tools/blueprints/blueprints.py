@@ -127,7 +127,10 @@ def bakery() -> tuple[Structure, dict]:
         "advertisements": [
             {"id": "eat", "activity": "villagersimulator:eat", "point": "service", "duration": "30m",
              "needs": {"hunger": 55, "comfort": 5}, "consumes": {"bread": 1},
-             "condition": "hour() >= 6 && hour() < 22"},
+             "condition": "hour() >= 6 && hour() < 22",
+             # Mealtime habit: breakfast, lunch and dinner are when people eat, whatever else they feel like.
+             # Only when peckish, so nobody eats dinner twice.
+             "score": "(hour() < 9 || (hour() >= 11.5 && hour() < 14) || (hour() >= 17 && hour() < 20.5)) && need('hunger') < 70 ? 150 : -40"},
         ],
     }
 

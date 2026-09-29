@@ -143,6 +143,45 @@ public final class BridgeGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * A villager embodied at T0 goes far away (T3, coarse days) and comes back: its puppet reappears where the plan
+     * says it is now, and its plan picks up at the entry for now.
+     */
+    @GameTest(template = "empty", batch = BATCH, timeoutTicks = 1200)
+    public static void crossingTiersKeepsTheVillagerConsistent(GameTestHelper h) {
+        AtomicReference<EntityId> villager = new AtomicReference<>();
+        AtomicReference<double[]> planPos = new AtomicReference<>();
+        AtomicReference<Boolean> entryOk = new AtomicReference<>();
+        TestSupport.spawn(TestSupport.compactVillage(h, "Tierstead", 31, 1, null), null)
+                .thenCompose(village -> sim().runtime().query(ctx -> ctx.get(village, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGE).residents().get(0)))
+                .thenAccept(villager::set);
+        h.startSequence()
+                .thenWaitUntil(() -> require(villager.get() != null, "spawned"))
+                .thenExecute(() -> force(villager.get(), Tier.T0))
+                .thenWaitUntil(() -> require(sim().bridge().puppet(villager.get()) != null, "embodied"))
+                .thenExecute(() -> {
+                    force(villager.get(), Tier.T3);
+                    sim().runtime().advanceTarget(com.ewitulsk.villagersimulator.api.sim.SimTime.hours(6));
+                })
+                .thenWaitUntil(() -> require(sim().bridge().puppet(villager.get()) == null, "puppet gone at T3"))
+                .thenExecute(() -> force(villager.get(), Tier.T0))
+                .thenWaitUntil(() -> require(sim().bridge().puppet(villager.get()) != null, "embodied again"))
+                .thenExecute(() -> sim().runtime().query(ctx -> {
+                    var e = com.ewitulsk.villagersimulator.content.plans.Plans.current(ctx, villager.get());
+                    entryOk.set(e != null && (e.contains(ctx.now()) || e.end() == ctx.now()));
+                    return com.ewitulsk.villagersimulator.content.plans.Plans.positionNow(ctx, villager.get());
+                }).thenAccept(planPos::set))
+                .thenWaitUntil(() -> require(planPos.get() != null, "queried"))
+                .thenExecute(() -> {
+                    require(Boolean.TRUE.equals(entryOk.get()), "plan resumed at the entry for now");
+                    SimVillagerEntity p = sim().bridge().puppet(villager.get());
+                    double d = Math.hypot(p.getX() - planPos.get()[0], p.getZ() - planPos.get()[2]);
+                    require(d < 13, "puppet near its plan position (" + d + " blocks)");
+                    force(villager.get(), null);
+                })
+                .thenSucceed();
+    }
+
     private static void force(EntityId villager, Tier tier) {
         sim().runtime().submit(new ForceTierCommand(List.of(villager), tier));
     }

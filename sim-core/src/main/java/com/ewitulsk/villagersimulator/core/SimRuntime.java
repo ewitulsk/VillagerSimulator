@@ -103,8 +103,8 @@ public final class SimRuntime implements AutoCloseable {
         return future;
     }
 
-    public CompletableFuture<SimWorld.Snapshot> snapshot(long lastSavedEventId) {
-        return query(ctx -> world.snapshot(lastSavedEventId));
+    public CompletableFuture<SimWorld.Snapshot> snapshot(int savedEvents) {
+        return query(ctx -> world.snapshot(savedEvents));
     }
 
     private void run(Consumer<SimWorld> action) {
@@ -177,5 +177,6 @@ public final class SimRuntime implements AutoCloseable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        world.close();
     }
 }

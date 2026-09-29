@@ -14,8 +14,11 @@ import java.util.List;
  * @param tx,ty,tz    current destination
  * @param behavior    embodied behaviour key (see {@code EmbodiedBehaviors})
  * @param appearance  appearance data for the client (for villagers: packed genes)
+ * @param route       remaining waypoints {@code x, y, z, ...} to the final destination (empty when not travelling);
+ *                    {@code tx, ty, tz} is the next of them
  */
 public record Embodiment(EntityId id, String name, double x, double y, double z, double tx, double ty, double tz,
-                         Id activity, String activityLabel, Id behavior, Tier tier, boolean forced, long appearance) {
+                         Id activity, String activityLabel, Id behavior, Tier tier, boolean forced, long appearance,
+                         double[] route) {
     public static final ViewKey<List<Embodiment>> VIEW = new ViewKey<>(Id.of("villagersimulator", "embodiment"));
 }

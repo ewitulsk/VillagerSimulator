@@ -15,7 +15,21 @@ public final class SimConfig {
             .comment("Villagers within this many blocks of a player are embodied as entities (tier T0).")
             .defineInRange("tiers.t0Radius", 48, 8, 128);
 
+    public static final ModConfigSpec.IntValue T3_RADIUS = BUILDER
+            .comment("Villagers farther than this many blocks from every player are simulated a day at a time (T3),",
+                    "unless they matter to a player (attention pinning).")
+            .defineInRange("tiers.t3Radius", 256, 64, 100_000);
+
+    public static final ModConfigSpec.IntValue WORKER_THREADS = BUILDER
+            .comment("Threads that simulate villages in parallel. 0 = half the CPU cores. Results don't depend on it.")
+            .defineInRange("sim.workerThreads", 0, 0, 256);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
+
+    public static int workerThreads() {
+        int n = WORKER_THREADS.get();
+        return n > 0 ? n : Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+    }
 
     private SimConfig() {}
 }

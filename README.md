@@ -4,7 +4,7 @@ A NeoForge 1.21.1 mod: a village simulation engine aiming at a million villagers
 
 - [docs/DESIGN.md](docs/DESIGN.md): what the game is
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it's built
-- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village), Phase 4 (Villagers With a Face).**
+- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village), Phase 4 (Villagers With a Face), Phase 5 (Districts & Seamless Tiers).**
 
 ## Project layout
 
@@ -70,9 +70,15 @@ In a creative overworld (cheats on):
 
 ![A villager washing at the well](docs/images/phase4-well.png)
 
+**Towns have districts.** `/vs village spawn` with more than 16 villagers lays out a two-district town (a residential quarter and a market quarter) joined by a road network; villagers walk along the roads. Each village simulates on its own thread, so many villages use many cores (`sim.workerThreads`).
+
+![A town's market street with the debug overlay](docs/images/phase5-town.png)
+
+**Seamless tiers.** Villagers within 48 blocks are embodied (T0), others in loaded chunks are T1, unloaded ones within 256 blocks are T2, and beyond that villages are simulated a day at a time (T3), unless a villager matters to a player (a friend, an appointment), in which case they're pinned to T2. Tier changes never teleport anyone: villagers appear where their schedule and route put them. `/vs debug overlay` draws chunk tiers (T0 green, T1 yellow, T2 orange, T3 red), district borders and walking routes.
+
 Walk more than 48 blocks away and the villagers become abstract (T2) while their days carry on. Come back and they're where their schedule says. The sim is saved in `<world>/villagersimulator/sim.db`.
 
-**Config** (`config/villagersimulator-common.toml`): `sim.debugTimeScale` speeds up sim time for playtesting; `tiers.t0Radius` sets the embodiment distance.
+**Config** (`config/villagersimulator-common.toml`): `sim.debugTimeScale` speeds up sim time for playtesting; `tiers.t0Radius` sets the embodiment distance, `tiers.t3Radius` the day-batch distance, `sim.workerThreads` the village threads.
 
 **Visual check:** `./gradlew :neoforge:runClientScript` runs a scripted client (window off-screen) that builds a hamlet, takes screenshots into `neoforge/runs/clientscript/screenshots/` and quits.
 

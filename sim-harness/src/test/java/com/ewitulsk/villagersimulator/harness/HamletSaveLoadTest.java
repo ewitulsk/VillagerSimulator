@@ -25,7 +25,7 @@ class HamletSaveLoadTest {
         original.warp(SimTime.days(2) + SimTime.hours(7));
 
         try (SqliteSimStore store = SqliteSimStore.open(dir.resolve("sim.db"))) {
-            store.save(original.world().snapshot(store.lastSavedEventId()), SimWorld.SNAPSHOT_FORMAT);
+            store.save(original.world().snapshot(store.savedEvents()), SimWorld.SNAPSHOT_FORMAT);
         }
         SimWorld restored = Scenario.world(ContentModules.all(), ClasspathDataSource.of(Scenario.class), 0);
         try (SqliteSimStore store = SqliteSimStore.open(dir.resolve("sim.db"))) {

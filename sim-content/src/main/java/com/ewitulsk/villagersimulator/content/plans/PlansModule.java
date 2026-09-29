@@ -40,6 +40,12 @@ public final class PlansModule implements SimModule {
         r.component(Plans.CURSOR);
         r.component(Plans.POSITION);
         r.task(Plans.ADVANCE);
+        r.task(Plans.DAY_BATCH);
+        r.task(Plans.DAY_BATCH_WORKER);
+        r.subscribe(com.ewitulsk.villagersimulator.api.sim.core.TierChanged.class, (ctx, e) -> {
+            if (e.to() == com.ewitulsk.villagersimulator.api.sim.core.Tier.T3) Plans.goCoarse(ctx, e.entity());
+            else if (e.from() == com.ewitulsk.villagersimulator.api.sim.core.Tier.T3) Plans.resume(ctx, e.entity());
+        });
         BasicActivities.all().forEach(r::activity);
         r.subscribe(VillagerCreated.class, (ctx, e) -> Plans.start(ctx, e.villager()));
         r.view(Embodiment.VIEW, PlansModule::embodiments);
@@ -54,8 +60,14 @@ public final class PlansModule implements SimModule {
             if (e == null || id == null) return;
             double[] p = e.positionAt(now);
             Activity a = ctx.activity(e.activity());
-            out.add(new Embodiment(v, id.name(), p[0], p[1], p[2], e.tx(), e.ty(), e.tz(), a.id(), a.label(),
-                    a.embodied(), CoreComponents.tier(ctx, v), CoreComponents.forced(ctx, v), Appearance.genes(ctx, v)));
+            // Head for the next road waypoint; the rest of the route is for the debug overlay.
+            double[][] path = e.path();
+            int next = e.nextPointAt(now);
+            double[] route = new double[(path.length - next) * 3];
+            for (int i = next; i < path.length; i++) System.arraycopy(path[i], 0, route, (i - next) * 3, 3);
+            double[] t = path[next];
+            out.add(new Embodiment(v, id.name(), p[0], p[1], p[2], t[0], t[1], t[2], a.id(), a.label(),
+                    a.embodied(), CoreComponents.tier(ctx, v), CoreComponents.forced(ctx, v), Appearance.genes(ctx, v), route));
         });
         return List.copyOf(out);
     }

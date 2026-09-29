@@ -20,7 +20,7 @@ public record ForceTierCommand(List<EntityId> entities, Tier tier) implements Si
                 ctx.set(e, CoreComponents.TIER_FORCED, 0);
             } else {
                 ctx.set(e, CoreComponents.TIER_FORCED, tier.ordinal() + 1);
-                ctx.set(e, CoreComponents.TIER_CURRENT, tier.ordinal());
+                CoreComponents.setTier(ctx, e, tier);
             }
         }
     }

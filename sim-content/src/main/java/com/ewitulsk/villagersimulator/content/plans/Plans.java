@@ -42,6 +42,8 @@ public final class Plans {
     public static final LongField CURSOR_STARTED = CURSOR.longField("started");
     /** Bumped every time an entry begins; the entry's end task carries it, so replaced entries' tasks go stale. */
     public static final IntField CURSOR_SEQ = CURSOR.intField("seq");
+    /** 1 while the villager is at T3 and advanced a day at a time ({@link #coarseDay}). */
+    public static final IntField CURSOR_COARSE = CURSOR.intField("coarse");
 
     /** Where the villager was when the current entry began (doubles stored as raw bits). */
     public static final DenseComponent POSITION = new DenseComponent(VS.id("position"), 1);
@@ -50,6 +52,10 @@ public final class Plans {
     private static final LongField POS_Z = POSITION.longField("z");
 
     public static final TaskType ADVANCE = new TaskType(VS.id("plan_advance"), 100, Plans::advance);
+    /** A T3 villager's whole day, resolved at once at the start of the day. */
+    public static final TaskType DAY_BATCH = new TaskType(VS.id("plan_day_batch"), 90, Plans::coarseDay);
+    /** The same for workers, earlier at the same time, so the day's production is there before anyone eats. */
+    public static final TaskType DAY_BATCH_WORKER = new TaskType(VS.id("plan_day_batch_worker"), 80, Plans::coarseDay);
 
     /** Event log type: a villager's hunger reached zero. */
     public static final Id EVENT_STARVING = VS.id("starving");
@@ -143,9 +149,9 @@ public final class Plans {
         }
         double dist = Choices.distance(at, e.target());
         if (!e.activity().equals(BasicActivities.TRAVEL) && dist > 0.5 && e.end() - now > 1) {
-            long travel = Math.min((long) Math.ceil(dist / DailyPlanner.WALK_SPEED), e.end() - now - 1);
-            PlanEntry walk = new PlanEntry(now, now + travel, BasicActivities.TRAVEL, e.venue(),
-                    at[0], at[1], at[2], e.tx(), e.ty(), e.tz(), Optional.empty());
+            PlanEntry walk = walk(ctx, v, now, at, e);
+            long travel = Math.min(walk.end() - now, e.end() - now - 1);
+            walk = walk.withTimes(now, now + travel);
             plan = replace(plan, index, List.of(walk, e.withTimes(now + travel, e.end())));
             e = walk;
         }
@@ -155,10 +161,33 @@ public final class Plans {
         int seq = ctx.get(v, CURSOR_SEQ) + 1;
         ctx.set(v, CURSOR_SEQ, seq);
         boolean atVenue = !e.venue().isNone() && ctx.alive(e.venue()) && !e.activity().equals(BasicActivities.TRAVEL);
-        if (e.ad().isPresent() && atVenue) Buildings.visited(ctx, e.venue());
+        if (e.ad().isPresent() && atVenue) {
+            Buildings.visited(ctx, e.venue());
+            if (!takeGoods(ctx, v, e)) {
+                // Sold out on arrival: idle here instead, and choose again afterwards.
+                PlanEntry idle = PlanEntry.stay(now, Math.min(e.end(), now + IDLE_BLOCK), BasicActivities.WANDER, EntityId.NONE, at, Optional.empty());
+                PlanEntry rest = PlanEntry.stay(idle.end(), e.end(), BasicActivities.FREE_TIME, EntityId.NONE, at, Optional.empty());
+                plan = replace(plan, index, List.of(idle, rest));
+                e = plan.entries().get(index);
+                atVenue = false;
+            }
+        }
         ctx.activity(e.activity()).begin(new ActivityContext(ctx, v, e.venue()));
         if (atVenue) ctx.publish(new PlanHooks.VisitStarted(v, e.venue(), e.activity(), e.ad(), now, e.end()));
         ctx.schedule(Math.max(now, e.end()), ADVANCE, v, seq);
+    }
+
+    /** A walk from {@code at} to where {@code e} happens, along the village roads, starting now. */
+    private static PlanEntry walk(SimContext ctx, EntityId v, long now, double[] at, PlanEntry e) {
+        var villager = ctx.get(v, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGER);
+        EntityId village = villager == null ? EntityId.NONE : villager.village();
+        List<double[]> route = com.ewitulsk.villagersimulator.content.villages.Roads.route(ctx, village, at, e.target());
+        List<Double> via = new ArrayList<>();
+        for (double[] p : route) for (double c : p) via.add(c);
+        PlanEntry walk = new PlanEntry(now, now + 1, BasicActivities.TRAVEL, e.venue(), at[0], at[1], at[2],
+                e.tx(), e.ty(), e.tz(), Optional.empty(), via.isEmpty() ? Optional.empty() : Optional.of(List.copyOf(via)));
+        long travel = Math.max(1, (long) Math.ceil(walk.length() / DailyPlanner.WALK_SPEED));
+        return walk.withTimes(now, now + travel);
     }
 
     /** Replaces a free-time entry: the best advertisement (or a short idle), then the remaining free time. */
@@ -168,7 +197,8 @@ public final class Plans {
         Optional<Choices.Option> choice = end - now >= MIN_CHOICE ? Choices.choose(ctx, v, at) : Optional.empty();
         if (choice.isPresent()) {
             Choices.Option o = choice.get();
-            long travel = (long) Math.ceil(Choices.distance(at, o.point()) / DailyPlanner.WALK_SPEED);
+            PlanEntry probe = PlanEntry.stay(now, end, o.ad().activity(), o.venue(), o.point(), Optional.empty());
+            long travel = walk(ctx, v, now, at, probe).end() - now;
             long chosenEnd = Math.min(end, now + travel + o.ad().durationTicks());
             return List.of(
                     PlanEntry.stay(now, chosenEnd, o.ad().activity(), o.venue(), o.point(), Optional.of(o.ad().id())),
@@ -188,6 +218,7 @@ public final class Plans {
         if (ctx.get(v, CURSOR_SEQ) != arg) return; // stale task from a replaced entry
 
         finish(ctx, v, plan.entries().get(index));
+        if (ctx.get(v, CURSOR_COARSE) != 0) return; // at T3 the day batch takes over
         if (index + 1 < plan.entries().size()) {
             begin(ctx, v, plan, index + 1);
         } else {
@@ -234,6 +265,71 @@ public final class Plans {
         begin(ctx, v, new Plan(plan.day(), out), at);
     }
 
+    // ------------------------------------------------------------------------------------------------ T3
+
+    /**
+     * The villager moved to T3 (far from every player): stop entry-by-entry simulation and resolve whole days at once
+     * (docs/DESIGN.md §4.2). The current entry is resolved up to now; needs are frozen until the next day batch.
+     */
+    public static void goCoarse(SimContext ctx, EntityId v) {
+        if (!ctx.has(v, CURSOR) || ctx.get(v, CURSOR_COARSE) != 0) return;
+        PlanEntry current = current(ctx, v);
+        if (current != null) finish(ctx, v, current);
+        ctx.set(v, CURSOR_COARSE, 1);
+        ctx.set(v, CURSOR_SEQ, ctx.get(v, CURSOR_SEQ) + 1); // the pending entry task goes stale
+        Needs.freeze(ctx, v);
+        long next = com.ewitulsk.villagersimulator.api.sim.SimTime.dayStart(ctx.now()) + com.ewitulsk.villagersimulator.api.sim.SimTime.TICKS_PER_DAY;
+        ctx.schedule(next, dayBatch(ctx, v), v, ctx.get(v, CURSOR_SEQ));
+    }
+
+    private static TaskType dayBatch(SimContext ctx, EntityId v) {
+        var villager = ctx.get(v, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGER);
+        return villager != null && villager.employed() ? DAY_BATCH_WORKER : DAY_BATCH;
+    }
+
+    /** The villager left T3: pick the plan up again at the entry for right now. */
+    public static void resume(SimContext ctx, EntityId v) {
+        if (!ctx.has(v, CURSOR) || ctx.get(v, CURSOR_COARSE) == 0) return;
+        ctx.set(v, CURSOR_COARSE, 0);
+        long day = com.ewitulsk.villagersimulator.api.sim.SimTime.day(ctx.now());
+        Plan plan = ctx.get(v, PLAN);
+        if (plan == null || plan.day() != day) plan = planDay(ctx, v, day);
+        begin(ctx, v, plan, plan.indexAt(ctx.now()));
+    }
+
+    /**
+     * One coarse day at T3: plan the day, run its fixed activities (work produces goods), eat up to three meals from
+     * the village's food, and set needs to where a normal day would leave them. No venue visits, so no interactions.
+     */
+    private static void coarseDay(SimContext ctx, EntityId v, long arg) {
+        if (!ctx.alive(v) || !ctx.has(v, CURSOR) || ctx.get(v, CURSOR_COARSE) == 0 || ctx.get(v, CURSOR_SEQ) != arg) return;
+        long day = com.ewitulsk.villagersimulator.api.sim.SimTime.day(ctx.now());
+        Plan plan = planDay(ctx, v, day);
+        for (PlanEntry e : plan.entries()) {
+            if (e.activity().equals(BasicActivities.FREE_TIME) || e.ad().isPresent()) continue;
+            ctx.activity(e.activity()).simulateAbstract(new ActivityContext(ctx, v, e.venue()), e.start(), e.end());
+        }
+        var villager = ctx.get(v, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGER);
+        int meals = 0;
+        EntityId food = villager == null ? EntityId.NONE
+                : com.ewitulsk.villagersimulator.content.villages.Villages.findService(ctx, villager.village(), "eat").orElse(EntityId.NONE);
+        for (int i = 0; i < 3 && !food.isNone(); i++) {
+            int bread = Buildings.stock(ctx, food, Buildings.BREAD);
+            if (bread <= 0) break;
+            Buildings.setStock(ctx, food, Buildings.BREAD, bread - 1);
+            meals++;
+        }
+        Needs.coarseDay(ctx, v, meals);
+        checkStarving(ctx, v);
+        int index = plan.indexAt(ctx.now());
+        ctx.set(v, CURSOR_INDEX, index);
+        ctx.set(v, CURSOR_STARTED, ctx.now());
+        setPosition(ctx, v, plan.entries().get(index).target());
+        int seq = ctx.get(v, CURSOR_SEQ) + 1;
+        ctx.set(v, CURSOR_SEQ, seq);
+        ctx.schedule(ctx.now() + com.ewitulsk.villagersimulator.api.sim.SimTime.TICKS_PER_DAY, dayBatch(ctx, v), v, seq);
+    }
+
     /** Applies a finished advertisement: goods consumed, need gains and effects, scaled by how much was completed. */
     private static void fulfil(SimContext ctx, EntityId v, PlanEntry e, long started) {
         if (e.venue().isNone() || !ctx.alive(e.venue())) return;
@@ -242,18 +338,7 @@ public final class Plans {
         if (ad == null) return; // removed by a data reload
         long planned = Math.max(1, e.end() - e.start());
         double fraction = Math.max(0, Math.min(1, (double) (ctx.now() - started) / planned));
-        if (!ad.consumes().isEmpty()) {
-            if (fraction < 0.5) return;
-            for (Map.Entry<String, Integer> good : ad.consumes().entrySet()) {
-                if (Buildings.stock(ctx, e.venue(), good.getKey()) < good.getValue()) {
-                    ctx.events().record(BasicActivities.EVENT_NO_FOOD, v, "No " + good.getKey() + " left");
-                    return;
-                }
-            }
-            for (Map.Entry<String, Integer> good : ad.consumes().entrySet()) {
-                Buildings.setStock(ctx, e.venue(), good.getKey(), Buildings.stock(ctx, e.venue(), good.getKey()) - good.getValue());
-            }
-        }
+        if (!ad.consumes().isEmpty() && fraction < 0.5) return; // the goods were taken at the start, but barely used
         for (Map.Entry<String, Double> gain : ad.needs().entrySet()) {
             Needs.NeedType t = Needs.byName(gain.getKey());
             if (t != null) t.need().add(ctx, v, (float) (gain.getValue() * fraction));
@@ -265,6 +350,26 @@ public final class Plans {
                 // reported by the buildings validator
             }
         }
+    }
+
+    /**
+     * Takes the goods an advertisement consumes when the villager starts using it, so a rush can't sell the same
+     * bread twice. Returns false (taking nothing) if anything is sold out.
+     */
+    private static boolean takeGoods(SimContext ctx, EntityId v, PlanEntry e) {
+        Advertisement ad = ctx.registry(BuildingType.REGISTRY).find(ctx.get(e.venue(), Buildings.BUILDING).type())
+                .flatMap(t -> t.advertisement(e.ad().get())).orElse(null);
+        if (ad == null || ad.consumes().isEmpty()) return true;
+        for (Map.Entry<String, Integer> good : ad.consumes().entrySet()) {
+            if (Buildings.stock(ctx, e.venue(), good.getKey()) < good.getValue()) {
+                ctx.events().record(BasicActivities.EVENT_NO_FOOD, v, "No " + good.getKey() + " left");
+                return false;
+            }
+        }
+        for (Map.Entry<String, Integer> good : ad.consumes().entrySet()) {
+            Buildings.setStock(ctx, e.venue(), good.getKey(), Buildings.stock(ctx, e.venue(), good.getKey()) - good.getValue());
+        }
+        return true;
     }
 
     private static void checkStarving(SimContext ctx, EntityId v) {

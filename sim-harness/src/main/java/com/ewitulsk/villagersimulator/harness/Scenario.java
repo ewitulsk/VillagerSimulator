@@ -43,11 +43,23 @@ public final class Scenario {
     }
 
     public static Scenario start(long startTime) {
-        return new Scenario(world(ContentModules.all(), ClasspathDataSource.of(Scenario.class), startTime));
+        return start(startTime, 1);
+    }
+
+    /** A world running shards on {@code threads} workers (results are the same for any count). */
+    public static Scenario start(long startTime, int threads) {
+        return new Scenario(SimWorld.builder().modules(ContentModules.all()).data(ClasspathDataSource.of(Scenario.class))
+                .startTime(startTime).threads(threads).build());
     }
 
     public static SimWorld world(List<SimModule> modules, DataSource data, long startTime) {
         return SimWorld.builder().modules(modules).data(data).startTime(startTime).build();
+    }
+
+    /** Spawns the two-district town layout centred at {@code (x, 64, z)} and returns the village. */
+    public EntityId spawnTown(String name, long seed, int villagers, int x, int z) {
+        var layout = VillageLayouts.town(world.registry(BuildingType.REGISTRY), x, 64, z, villagers);
+        return spawn(new SpawnVillageCommand(name, seed, x, 64, z, layout.placements(), layout.districts(), villagers, null));
     }
 
     public SimWorld world() {
@@ -73,8 +85,7 @@ public final class Scenario {
     public EntityId spawn(SpawnVillageCommand command) {
         AtomicReference<EntityId> out = new AtomicReference<>();
         java.util.function.Consumer<EntityId> previous = command.onCreated();
-        world.apply(new SpawnVillageCommand(command.name(), command.seed(), command.centerX(), command.centerY(),
-                command.centerZ(), command.placements(), command.villagers(), id -> {
+        world.apply(command.withCallback(id -> {
             out.set(id);
             if (previous != null) previous.accept(id);
         }));

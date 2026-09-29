@@ -71,6 +71,11 @@ public final class VsCommands {
                         Commands.argument("expression", StringArgumentType.greedyString()).executes(VsCommands::evalExpression))))
                 .then(Commands.literal("problems").executes(VsCommands::problems))
                 .then(Commands.literal("reputation").executes(VsCommands::reputation))
+                .then(Commands.literal("debug").then(Commands.literal("overlay").executes(c -> {
+                    boolean on = sim().bridge().toggleOverlay(c.getSource().getPlayerOrException());
+                    c.getSource().sendSuccess(() -> Component.literal("Debug overlay " + (on ? "on: chunk tiers (T0 green, T1 yellow, T2 orange, T3 red), districts, routes" : "off")), false);
+                    return 1;
+                })))
                 .then(Commands.literal("save").executes(VsCommands::save)));
     }
 
@@ -95,7 +100,10 @@ public final class VsCommands {
 
         var types = sim.registry(BuildingType.REGISTRY);
         List<SpawnVillageCommand.Placement> placements = new ArrayList<>();
-        for (SpawnVillageCommand.Placement p : VillageLayouts.hamlet(types, centre.getX(), centre.getY(), centre.getZ(), villagers)) {
+        // Up to 16 villagers get a hamlet; more get a two-district town.
+        var layout = villagers > 16 ? VillageLayouts.town(types, centre.getX(), centre.getY(), centre.getZ(), villagers)
+                : new VillageLayouts.Layout(VillageLayouts.hamlet(types, centre.getX(), centre.getY(), centre.getZ(), villagers), List.of());
+        for (SpawnVillageCommand.Placement p : layout.placements()) {
             BuildingType type = types.get(p.type());
             int y = BlueprintPlacer.groundY(level, p.x(), p.z(), type);
             if (!BlueprintPlacer.place(level, type, new BlockPos(p.x(), y, p.z()))) {
@@ -106,7 +114,7 @@ public final class VsCommands {
         }
         int groundY = BlueprintPlacer.groundY(level, centre.getX(), centre.getZ(), types.get(VillageLayouts.WELL)) + 1;
         sim.runtime().submit(new SpawnVillageCommand(villageName, seed, centre.getX(), groundY, centre.getZ(), placements,
-                villagers, id -> sim.server().execute(() -> source.sendSuccess(() -> Component.literal(
+                layout.districts(), villagers, id -> sim.server().execute(() -> source.sendSuccess(() -> Component.literal(
                         "Founded " + villageName + " with " + villagers + " villagers (" + id + ")"), true))));
         return 1;
     }

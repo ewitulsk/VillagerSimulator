@@ -22,7 +22,7 @@ import com.google.gson.JsonPrimitive;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,9 +34,11 @@ public final class LogicImpl implements Logic {
     private final Map<String, ExpressionFunction> functions = new LinkedHashMap<>();
     private final Map<Id, LogicFactories.ConditionFactory> conditionTypes = new LinkedHashMap<>();
     private final Map<Id, LogicFactories.EffectFactory> effectTypes = new LinkedHashMap<>();
-    private final Map<String, Expression> expressions = new HashMap<>();
-    private final Map<String, Condition> conditions = new HashMap<>();
-    private final Map<String, Effect> effects = new HashMap<>();
+    // Shards compile in parallel. Plain get/put (not computeIfAbsent): compiling a condition compiles expressions,
+    // and ConcurrentHashMap doesn't allow nested updates. Compiling the same thing twice is harmless.
+    private final Map<String, Expression> expressions = new ConcurrentHashMap<>();
+    private final Map<String, Condition> conditions = new ConcurrentHashMap<>();
+    private final Map<String, Effect> effects = new ConcurrentHashMap<>();
     private final ExpressionCompiler compiler = new ExpressionCompiler(functions);
 
     public LogicImpl() {
@@ -72,7 +74,8 @@ public final class LogicImpl implements Logic {
         Expression e = expressions.get(key);
         if (e == null) {
             e = compiler.compile(source, expected);
-            expressions.put(key, e);
+            Expression raced = expressions.putIfAbsent(key, e);
+            if (raced != null) e = raced;
         }
         return e;
     }
@@ -83,7 +86,8 @@ public final class LogicImpl implements Logic {
         Condition c = conditions.get(key);
         if (c == null) {
             c = buildCondition(json);
-            conditions.put(key, c);
+            Condition raced = conditions.putIfAbsent(key, c);
+            if (raced != null) c = raced;
         }
         return c;
     }
@@ -94,7 +98,8 @@ public final class LogicImpl implements Logic {
         Effect e = effects.get(key);
         if (e == null) {
             e = buildEffect(json);
-            effects.put(key, e);
+            Effect raced = effects.putIfAbsent(key, e);
+            if (raced != null) e = raced;
         }
         return e;
     }

@@ -30,7 +30,7 @@ public final class Choices {
     /** Options scoring below this aren't worth getting up for; the villager just idles. */
     public static final double MIN_SCORE = 20;
     /** Score lost per block walked. */
-    public static final double DISTANCE_COST = 0.3;
+    public static final double DISTANCE_COST = 0.6;
     /** Spread of the per-option random bonus, so equal options don't always resolve the same way. */
     public static final double VARIETY = 4;
 
@@ -66,14 +66,24 @@ public final class Choices {
     /** An option has to restore at least this much of a critical need to count as helping. */
     public static final double REAL_HELP = 20;
 
-    /** While a need is critical, anything that doesn't really help it is nearly out of the question. */
+    /**
+     * While a need is critical, anything that doesn't really help the most pressing one is nearly out of the
+     * question. Only the most pressing counts (Maslow: a starving, lonely villager eats first), weighted by priority.
+     */
     public static final Consideration URGENT = c -> {
-        double penalty = 0;
+        Needs.NeedType worst = null;
+        double worstUrgency = 0;
         for (Needs.NeedType t : Needs.ALL) {
-            if (t.need().value(c.sim(), c.actor()) > CRITICAL) continue;
-            if (c.ad().needs().getOrDefault(t.name(), 0.0) < REAL_HELP) penalty -= 150;
+            double value = t.need().value(c.sim(), c.actor());
+            if (value > CRITICAL) continue;
+            double urgency = (Need.MAX - value) * t.priority();
+            if (urgency > worstUrgency) {
+                worstUrgency = urgency;
+                worst = t;
+            }
         }
-        return penalty;
+        if (worst == null || c.ad().needs().getOrDefault(worst.name(), 0.0) >= REAL_HELP) return 0;
+        return -150 * worst.priority();
     };
 
     public static final Consideration DISTANCE = c -> -DISTANCE_COST * distance(c.from(), c.point());

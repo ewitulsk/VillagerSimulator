@@ -6,6 +6,10 @@ import com.ewitulsk.villagersimulator.neoforge.net.DialoguePayload;
 public final class ClientHandlers {
     private ClientHandlers() {}
 
+    public static void overlay(com.ewitulsk.villagersimulator.neoforge.net.DebugOverlayPayload payload) {
+        DebugOverlayRenderer.update(payload);
+    }
+
     public static void dialogue(DialoguePayload payload) {
         DialogueScreen.show(payload);
     }

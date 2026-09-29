@@ -82,6 +82,27 @@ public final class Needs {
         }
     }
 
+    /** Stops all needs changing (T3 villagers between day batches). */
+    public static void freeze(SimContext ctx, EntityId e) {
+        ensure(ctx, e);
+        for (NeedType t : ALL) t.need().setRate(ctx, e, 0);
+    }
+
+    /**
+     * Where a normal day leaves a villager's needs, for T3 day batches: hunger falls by a day's burn and rises by
+     * the meals eaten; sleep restores energy and comfort; free time tops up the rest.
+     */
+    public static void coarseDay(SimContext ctx, EntityId e, int meals) {
+        ensure(ctx, e);
+        HUNGER.set(ctx, e, HUNGER.value(ctx, e) - 150 + meals * 55);
+        ENERGY.set(ctx, e, 85);
+        SOCIAL.set(ctx, e, Math.max(SOCIAL.value(ctx, e), 60));
+        FUN.set(ctx, e, Math.max(FUN.value(ctx, e), 55));
+        HYGIENE.set(ctx, e, Math.max(HYGIENE.value(ctx, e), 60));
+        COMFORT.set(ctx, e, Math.max(COMFORT.value(ctx, e), 70));
+        freeze(ctx, e);
+    }
+
     public static void awake(SimContext ctx, EntityId e) {
         setRates(ctx, e, false);
     }

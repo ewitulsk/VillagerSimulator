@@ -5,13 +5,14 @@ import com.ewitulsk.villagersimulator.api.sim.Id;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
-/** A placed building: its type, blueprint origin (min corner) and village. */
-public record Building(Id type, int x, int y, int z, EntityId village) {
+/** A placed building: its type, blueprint origin (min corner), village and district. */
+public record Building(Id type, int x, int y, int z, EntityId village, EntityId district) {
     public static final Codec<Building> CODEC = RecordCodecBuilder.create(i -> i.group(
             Id.CODEC.fieldOf("type").forGetter(Building::type),
             Codec.INT.fieldOf("x").forGetter(Building::x),
             Codec.INT.fieldOf("y").forGetter(Building::y),
             Codec.INT.fieldOf("z").forGetter(Building::z),
-            EntityId.CODEC.fieldOf("village").forGetter(Building::village)
+            EntityId.CODEC.fieldOf("village").forGetter(Building::village),
+            EntityId.CODEC.optionalFieldOf("district", EntityId.NONE).forGetter(Building::district)
     ).apply(i, Building::new));
 }

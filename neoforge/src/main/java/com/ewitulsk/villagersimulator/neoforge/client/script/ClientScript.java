@@ -81,6 +81,7 @@ public final class ClientScript {
         }
         switch (NAME) {
             case "look" -> buildLook();
+            case "town" -> buildTown();
             default -> throw new IllegalArgumentException("Unknown client script " + NAME);
         }
     }
@@ -108,6 +109,25 @@ public final class ClientScript {
             tp(origin.add(12, 6, 10), origin.add(6, 0, -6));
         });
         shot("evening", "villagers relaxing, drinking at the tavern or walking home");
+    }
+
+    /** Phase 5 visual check: a two-district town of 60 from above, with the debug overlay on. */
+    private void buildTown() {
+        then("spawn a town", 60, () -> {
+            origin = mc.player.position();
+            mc.player.getAbilities().flying = true;
+            mc.player.onUpdateAbilities();
+            mc.options.tutorialStep = net.minecraft.client.tutorial.TutorialSteps.NONE;
+            mc.getTutorial().setStep(net.minecraft.client.tutorial.TutorialSteps.NONE);
+            cmd("vs village spawn 60 Greatford");
+        });
+        then("warp to mid-morning", 10, () -> cmd("vs time warp 3h"));
+        then("overlay on", 10, () -> cmd("vs debug overlay"));
+        then("aerial camera", 200, () -> tp(origin.add(-5, 45, 40), origin.add(-5, 0, 0)));
+        until("villagers embodied", 400, () -> puppets() > 0);
+        shot("town_overlay", "two districts (cyan boxes), chunk tiers, houses west, market east, routes in blue");
+        then("street camera", 100, () -> tp(origin.add(20, 4, 12), origin.add(30, 0, -6)));
+        shot("market_street", "villagers walking between bakeries, taverns and stalls in the Market Quarter");
     }
 
     // ------------------------------------------------------------------ building

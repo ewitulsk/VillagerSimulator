@@ -59,6 +59,7 @@ public final class SimBridge {
         if (tickCount % RECONCILE_INTERVAL == 0) reconcile(level);
         if (tickCount % SWEEP_INTERVAL == 0) sweepOrphans(level);
         if (tickCount % TIER_INTERVAL == 0 && SimServer.get() != null) SimPlayers.reportPositions(SimServer.get());
+        if (tickCount % TIER_INTERVAL == 0) sendOverlays(level);
     }
 
     /**
@@ -115,10 +116,96 @@ public final class SimBridge {
                     break;
                 }
             }
-            Tier want = near && level.isPositionEntityTicking(BlockPos.containing(e.x(), e.y(), e.z())) ? Tier.T0 : Tier.T2;
+            Tier want = tierFor(level, players, e.x(), e.y(), e.z(), near);
             if (want != e.tier()) changes.put(e.id(), want);
         }
         if (!changes.isEmpty()) runtime.submit(new SetTiersCommand(Map.copyOf(changes)));
+    }
+
+    /**
+     * T0 near a player (in a ticking chunk), T1 in other ticking chunks, T3 beyond {@code tiers.t3Radius} of every
+     * player, T2 otherwise (docs/DESIGN.md §4.2). With no players online everything stays at T2.
+     */
+    static Tier tierFor(ServerLevel level, List<ServerPlayer> players, double x, double y, double z, boolean nearPlayer) {
+        boolean ticking = level.isPositionEntityTicking(BlockPos.containing(x, y, z));
+        if (nearPlayer && ticking) return Tier.T0;
+        if (ticking) return Tier.T1;
+        if (players.isEmpty()) return Tier.T2; // nobody to be far from: keep full detail
+        double far = SimConfig.T3_RADIUS.get();
+        for (ServerPlayer p : players) {
+            double dx = p.getX() - x, dz = p.getZ() - z;
+            if (dx * dx + dz * dz <= far * far) return Tier.T2;
+        }
+        return Tier.T3;
+    }
+
+    // ------------------------------------------------------------------------------------------------ debug overlay
+
+    private final java.util.Set<java.util.UUID> overlayViewers = new java.util.HashSet<>();
+
+    /** Turns the debug overlay on or off for a player; returns whether it is now on. */
+    public boolean toggleOverlay(ServerPlayer player) {
+        if (overlayViewers.remove(player.getUUID())) {
+            send(player, new com.ewitulsk.villagersimulator.neoforge.net.DebugOverlayPayload(new int[0], List.of(), List.of()));
+            return false;
+        }
+        overlayViewers.add(player.getUUID());
+        return true;
+    }
+
+    private void sendOverlays(ServerLevel level) {
+        if (overlayViewers.isEmpty()) return;
+        List<com.ewitulsk.villagersimulator.content.villages.Villages.DistrictInfo> districts =
+                viewsSeen == null ? null : viewsSeen.get(com.ewitulsk.villagersimulator.content.villages.Villages.DISTRICTS);
+        List<ServerPlayer> players = level.players();
+        int radius = SimConfig.T0_RADIUS.get();
+        for (ServerPlayer p : players) {
+            if (!overlayViewers.contains(p.getUUID())) continue;
+            int pcx = p.chunkPosition().x, pcz = p.chunkPosition().z;
+            List<Integer> chunks = new java.util.ArrayList<>();
+            for (int dx = -6; dx <= 6; dx++) {
+                for (int dz = -6; dz <= 6; dz++) {
+                    int cx = pcx + dx, cz = pcz + dz;
+                    double x = cx * 16 + 8, z = cz * 16 + 8;
+                    boolean near = false;
+                    for (ServerPlayer q : players) {
+                        double ddx = q.getX() - x, ddz = q.getZ() - z;
+                        if (ddx * ddx + ddz * ddz <= (double) radius * radius) near = true;
+                    }
+                    chunks.add(cx);
+                    chunks.add(cz);
+                    chunks.add(tierFor(level, players, x, p.getY(), z, near).ordinal());
+                }
+            }
+            List<com.ewitulsk.villagersimulator.neoforge.net.DebugOverlayPayload.District> ds = new java.util.ArrayList<>();
+            if (districts != null) {
+                for (var d : districts) {
+                    if (Math.abs(d.x0() - p.getX()) < 400 && Math.abs(d.z0() - p.getZ()) < 400) {
+                        ds.add(new com.ewitulsk.villagersimulator.neoforge.net.DebugOverlayPayload.District(d.name(), d.x0(), d.z0(), d.x1(), d.z1()));
+                    }
+                }
+            }
+            List<double[]> routes = new java.util.ArrayList<>();
+            for (Embodiment e : embodiments.values()) {
+                if (e.route().length < 6 || Math.abs(e.x() - p.getX()) > 96 || Math.abs(e.z() - p.getZ()) > 96) continue;
+                double[] r = new double[e.route().length + 3];
+                r[0] = e.x();
+                r[1] = e.y();
+                r[2] = e.z();
+                System.arraycopy(e.route(), 0, r, 3, e.route().length);
+                routes.add(r);
+            }
+            send(p, new com.ewitulsk.villagersimulator.neoforge.net.DebugOverlayPayload(
+                    chunks.stream().mapToInt(Integer::intValue).toArray(), ds, routes));
+        }
+    }
+
+    private static void send(ServerPlayer player, net.minecraft.network.protocol.common.custom.CustomPacketPayload payload) {
+        try {
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, payload);
+        } catch (RuntimeException ignored) {
+            // players without the channel (fake connections)
+        }
     }
 
     /** Spawns a puppet for every T0 villager that lacks one, and removes puppets the sim no longer embodies. */

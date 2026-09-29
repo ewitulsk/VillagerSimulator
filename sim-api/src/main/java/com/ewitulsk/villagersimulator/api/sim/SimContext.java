@@ -20,7 +20,13 @@ import java.util.List;
 import java.util.function.BiConsumer;
 
 /**
- * The sim as seen by modules, commands and queries. Only used on the sim thread.
+ * The sim as seen by modules, commands and queries.
+ *
+ * <p><b>Shards</b> (docs/ARCHITECTURE.md §6.3): entities belong to shards (in practice, one per village; shard 0 is the
+ * world: players and anything unassigned). Between window boundaries shards run in parallel. A task handler may
+ * freely read and write entities of its own shard; writes to other shards' entities are deferred and applied, in a
+ * fixed order, at the next boundary. Reading another shard's mutable state mid-window is not deterministic, so
+ * don't. Entities are created, destroyed and moved between shards only by commands, which run at boundaries.
  */
 public interface SimContext {
     /** Current sim time in ticks. Monotonic. */
@@ -34,6 +40,16 @@ public interface SimContext {
     void destroy(EntityId entity);
 
     boolean alive(EntityId entity);
+
+    // --- shards ---
+
+    /** Creates a new shard (commands only). */
+    int newShard();
+
+    /** Moves an entity (and its pending tasks) to a shard (commands only). */
+    void setShard(EntityId entity, int shard);
+
+    int shardOf(EntityId entity);
 
     // --- dense components ---
 

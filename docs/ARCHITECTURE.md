@@ -177,6 +177,7 @@ public static final ComponentType<Hunger> HUNGER = r.denseComponent(
 - **Storage is per shard** (one shard per district). Rows are local to the shard's thread: cache-friendly and lock-free.
 - **A global directory** maps `entity → (shard, row)`. Moving between districts moves the row and updates the directory.
 - **Queries** iterate the entities that have a set of components (`query(HUNGER, LOCATION).without(ASLEEP)`), per shard.
+- **As built (Phase 5):** one shard per **village**, plus shard 0 for world-level entities (players). A village's districts share its shard; splitting a mega-city into district shards is deferred to Phase 40. Stores are shared structures that are safe for disjoint shards to write concurrently (a concurrent sparse map, dense columns reserved at entity creation); during a window a shard may read anything but writes to other shards' entities (and relationship edges between shards) are deferred to the boundary. Windows are 200 sim ticks. Per-shard event writers are merged at the boundary in `(time, shard)` order, so results are identical for any thread count.
 
 ### 5.4 Specialised stores
 - **Relationship graph:** per-villager adjacency in packed `long[]`, each entry holding target handle + friendship + romance + bond flags. Weak ties decay out. It gets its own store because it's the main memory risk.

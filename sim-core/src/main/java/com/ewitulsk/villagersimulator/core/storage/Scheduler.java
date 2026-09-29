@@ -28,6 +28,18 @@ public final class Scheduler {
         nextSeq = Math.max(nextSeq, task.seq() + 1);
     }
 
+    /** Removes and returns every task targeting {@code target} (for moving an entity to another shard). */
+    public List<Task> removeTarget(int target) {
+        List<Task> out = new ArrayList<>();
+        queue.removeIf(t -> {
+            if (t.target() != target) return false;
+            out.add(t);
+            return true;
+        });
+        out.sort(ORDER);
+        return out;
+    }
+
     public Task peek() {
         return queue.peek();
     }

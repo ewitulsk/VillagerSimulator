@@ -20,8 +20,8 @@ import java.util.Optional;
  * ({@link Plans}), so the plan stays true to the villager's position at every moment (docs/DESIGN.md §4.4).
  */
 public final class DailyPlanner {
-    /** Walking speed along a straight line, blocks per tick (Phase 5 moves travel onto the road graph). */
-    public static final double WALK_SPEED = 0.1;
+    /** Walking speed along roads, blocks per tick (3 blocks a second). */
+    public static final double WALK_SPEED = 0.15;
     private static final long H = SimTime.TICKS_PER_HOUR;
 
     private DailyPlanner() {}
@@ -29,7 +29,8 @@ public final class DailyPlanner {
     public static Plan generate(SimContext ctx, EntityId villagerId, long day) {
         Villager v = ctx.get(villagerId, Villages.VILLAGER);
         long d0 = day * SimTime.TICKS_PER_DAY;
-        long wake = (long) (SimRandom.unit(v.seed(), day, SimRandom.salt("wake")) * 600);
+        // Workers are up early enough for breakfast before a 07:00 shift.
+        long wake = (long) (SimRandom.unit(v.seed(), day, SimRandom.salt("wake")) * (v.employed() ? 250 : 600));
         long bed = (long) (SimRandom.unit(v.seed(), day, SimRandom.salt("bed")) * 900);
         long bedtime = d0 + 14 * H + H / 2 + bed;
 

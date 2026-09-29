@@ -1,13 +1,19 @@
 package com.ewitulsk.villagersimulator.core.storage;
 
 import com.ewitulsk.villagersimulator.api.sim.component.SparseComponent;
-import it.unimi.dsi.fastutil.ints.Int2ObjectAVLTreeMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectSortedMap;
 
-/** One object per entity, kept sorted by entity index so iteration order is deterministic. */
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * One object per entity. Thread-safe, so shards can write their own entities in parallel; iteration is always in
+ * entity-index order, so it stays deterministic.
+ */
 public final class SparseStore<T> {
     private final SparseComponent<T> component;
-    private final Int2ObjectSortedMap<T> values = new Int2ObjectAVLTreeMap<>();
+    private final ConcurrentHashMap<Integer, T> values = new ConcurrentHashMap<>();
 
     public SparseStore(SparseComponent<T> component) {
         this.component = component;
@@ -34,8 +40,15 @@ public final class SparseStore<T> {
         values.remove(index);
     }
 
-    public Int2ObjectSortedMap<T> values() {
-        return values;
+    public int size() {
+        return values.size();
+    }
+
+    /** Entries sorted by entity index (a copy). */
+    public List<Map.Entry<Integer, T>> sorted() {
+        List<Map.Entry<Integer, T>> out = new ArrayList<>(values.entrySet());
+        out.sort(Map.Entry.comparingByKey());
+        return out;
     }
 
     @SuppressWarnings("unchecked")

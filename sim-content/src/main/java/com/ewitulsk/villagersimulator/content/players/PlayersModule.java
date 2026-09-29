@@ -52,6 +52,7 @@ public final class PlayersModule implements SimModule {
         r.activity(new BasicActivities.Simple(Players.VISIT, "Visiting", EmbodiedBehaviors.IDLE, false));
         r.activity(new BasicActivities.Simple(Players.LISTEN, "Talking with you", EmbodiedBehaviors.IDLE, false));
         r.subscribe(Social.Interacted.class, (ctx, e) -> gossip(ctx, e.a(), e.b()));
+        r.subscribe(com.ewitulsk.villagersimulator.content.plans.PlanHooks.DayPlanned.class, (ctx, e) -> refreshPin(ctx, e.villager()));
     }
 
     /**
@@ -66,8 +67,15 @@ public final class PlayersModule implements SimModule {
         double weight = GOSSIP_RATE * Math.max(0.1, Math.min(1, (trust + 30) / 100));
         Map<EntityId, Float> fromA = playerOpinions(ctx, a), fromB = playerOpinions(ctx, b);
         Map<EntityId, Float> changesForB = new LinkedHashMap<>(), changesForA = new LinkedHashMap<>();
-        fromA.forEach((p, op) -> changesForB.put(p, (float) ((op - ctx.relationships().friendship(b, p)) * weight)));
-        fromB.forEach((p, op) -> changesForA.put(p, (float) ((op - ctx.relationships().friendship(a, p)) * weight)));
+        // Hearsay only moves someone whose own opinion is weaker: a close friend isn't talked out of liking you.
+        fromA.forEach((p, op) -> {
+            float mine = ctx.relationships().friendship(b, p);
+            if (Math.abs(op) > Math.abs(mine)) changesForB.put(p, (float) ((op - mine) * weight));
+        });
+        fromB.forEach((p, op) -> {
+            float mine = ctx.relationships().friendship(a, p);
+            if (Math.abs(op) > Math.abs(mine)) changesForA.put(p, (float) ((op - mine) * weight));
+        });
         changesForB.forEach((p, d) -> ctx.relationships().changeFriendship(b, p, d));
         changesForA.forEach((p, d) -> ctx.relationships().changeFriendship(a, p, d));
     }
@@ -80,11 +88,39 @@ public final class PlayersModule implements SimModule {
         return out;
     }
 
+    /** Friendship with a player at which a villager is pinned (never simulated coarser than T2). */
+    public static final float PIN_FRIENDSHIP = 40;
+
+    /**
+     * Attention pinning (docs/DESIGN.md §11.6): villagers who matter to a player (close friends, or meeting one)
+     * keep full detail wherever they are.
+     */
+    public static void refreshPin(SimContext ctx, EntityId villager) {
+        boolean pinned = false;
+        for (Relation r : ctx.relationships().of(villager)) {
+            if (r.friendship() >= PIN_FRIENDSHIP && Players.isPlayer(ctx, r.other())) {
+                pinned = true;
+                break;
+            }
+        }
+        if (!pinned) {
+            for (com.ewitulsk.villagersimulator.content.social.Appointment a
+                    : com.ewitulsk.villagersimulator.content.social.Appointments.of(ctx, villager)) {
+                if (!a.resolved() && Players.isPlayer(ctx, a.other())) {
+                    pinned = true;
+                    break;
+                }
+            }
+        }
+        com.ewitulsk.villagersimulator.api.sim.core.CoreComponents.setPinned(ctx, villager, pinned);
+    }
+
     /** A player gives a villager an item. Calls back with the villager's reaction. */
     public record Gift(EntityId villager, EntityId player, String item, Consumer<String> reply) implements SimCommand {
         @Override
         public void apply(SimContext ctx) {
             reply.accept(give(ctx, villager, player, item));
+            if (ctx.alive(villager)) refreshPin(ctx, villager);
         }
     }
 

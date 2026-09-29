@@ -49,8 +49,7 @@ final class TestSupport {
     /** Submits {@code command}, recording the sim time it was applied at. Completes with the new village. */
     static CompletableFuture<EntityId> spawn(SpawnVillageCommand command, AtomicLong appliedAt) {
         CompletableFuture<EntityId> village = new CompletableFuture<>();
-        SpawnVillageCommand withCallback = new SpawnVillageCommand(command.name(), command.seed(), command.centerX(),
-                command.centerY(), command.centerZ(), command.placements(), command.villagers(), village::complete);
+        SpawnVillageCommand withCallback = command.withCallback(village::complete);
         sim().runtime().submit(ctx -> {
             if (appliedAt != null) appliedAt.set(ctx.now());
             withCallback.apply(ctx);

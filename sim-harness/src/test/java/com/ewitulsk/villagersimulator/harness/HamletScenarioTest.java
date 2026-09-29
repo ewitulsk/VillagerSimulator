@@ -61,7 +61,8 @@ class HamletScenarioTest {
     void scheduleFollowsTheClock() {
         Scenario s = Scenario.start();
         EntityId village = s.spawnHamlet("Testford", 3, 8);
-        EntityId baker = s.village(village).residents().get(0);
+        EntityId baker = s.village(village).residents().stream()
+                .filter(r -> s.world().get(r, Villages.VILLAGER).employed()).findFirst().orElseThrow();
 
         s.warp(SimTime.hours(3)); // 09:00 of day 0
         assertEquals("villagersimulator:bake", Plans.current(s.world(), baker).activity().toString());

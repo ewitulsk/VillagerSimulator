@@ -50,6 +50,8 @@ public final class VillagerSimulatorMod {
             PayloadRegistrar registrar = e.registrar("1");
             registrar.playToClient(DialoguePayload.TYPE, DialoguePayload.CODEC, (payload, ctx) -> ClientHandlers.dialogue(payload));
             registrar.playToServer(DialogueChoicePayload.TYPE, DialogueChoicePayload.CODEC, SimPlayers::onChoice);
+            registrar.playToClient(com.ewitulsk.villagersimulator.neoforge.net.DebugOverlayPayload.TYPE,
+                    com.ewitulsk.villagersimulator.neoforge.net.DebugOverlayPayload.CODEC, (payload, ctx) -> ClientHandlers.overlay(payload));
         });
 
         NeoForge.EVENT_BUS.addListener(AddReloadListenerEvent.class, e -> e.addListener(new SimDataReloadListener()));

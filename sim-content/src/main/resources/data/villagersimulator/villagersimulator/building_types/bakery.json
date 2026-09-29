@@ -94,7 +94,8 @@
       "consumes": {
         "bread": 1
       },
-      "condition": "hour() >= 6 && hour() < 22"
+      "condition": "hour() >= 6 && hour() < 22",
+      "score": "(hour() < 9 || (hour() >= 11.5 && hour() < 14) || (hour() >= 17 && hour() < 20.5)) && need('hunger') < 70 ? 150 : -40"
     }
   ]
 }
