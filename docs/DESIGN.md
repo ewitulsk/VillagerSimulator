@@ -26,7 +26,7 @@ Throughout this document:
 9. [Buildings & Smart Objects](#9-buildings--smart-objects)
 10. [Construction & Mining](#10-construction--mining)
 11. [The Player as a Sim Agent](#11-the-player-as-a-sim-agent)
-12. [Villages, Districts & Cultures](#12-villages-districts--cultures)
+12. [Villages: Districts, Cultures, Growth, Housing & Architecture](#12-villages-districts-cultures-growth-housing--architecture)
 13. [Governance](#13-governance)
 14. [Crime & Justice](#14-crime--justice)
 15. [Religion](#15-religion)
@@ -82,6 +82,14 @@ Throughout this document:
 | D23 | Lifespan | Default **~5 real hours**, with individual variance, **server configurable** | DECIDED |
 | D24 | Currency | Custom coins per realm + emeralds as the cross-realm standard | DECIDED |
 | D25 | Magic | **None** | DECIDED |
+| D26 | Village stages | Six stages (Camp → Metropolis) gated by population + institutions, **with decline and ruins** | DECIDED |
+| D27 | Building content | **Hand-built landmarks + modular kits + palette swapping** | DECIDED |
+| D28 | Structure authoring | Agentic building with **MinecraftStructureInjector (Structure Lab)** + an **in-game structure editor** | DECIDED |
+| D29 | Moving out | **Culture-dependent**; default "stay until married or can afford a place" | DECIDED |
+| D30 | Blocks | Custom blocks allowed, but **prefer vanilla whenever possible** | DECIDED |
+| D31 | Graveyards | **Named graves for notable villagers**; everyone else in a browsable crypt/ossuary ledger | DECIDED |
+| D32 | Households | Household (lives together, shares a budget) is separate from family (kinship); the **bed** is the unit of housing capacity | DECIDED |
+| D33 | Building levels | Each building type has **levels 1–5**; buildings can be upgraded, repurposed, neglected, damaged and ruined | DECIDED |
 
 ---
 
@@ -283,19 +291,27 @@ Every building (and many objects inside it) **advertises** what it offers:
 
 Villagers score the advertisements they can reach against their needs, personality, values, wealth, laws and relationships, then pick one. **Adding a building type means writing its advertisements, with no villager AI changes.** Laws can switch advertisements off (e.g. a tavern ban).
 
-### 9.2 Building catalogue (initial)
-| Category | Buildings |
+### 9.2 Building catalogue
+Buildings unlock by village stage (§12.4). Every type has **levels 1–5** (§10.7).
+
+| Category | Buildings (unlock stage) |
 |---|---|
-| Housing | Hovel, cottage, townhouse, manor, apartments/tenements, barracks |
-| Food | Farm, ranch, fishery, mill, **bakery**, butcher, brewery, winery, **grocery/market stall** |
-| Industry | **Mine**, quarry, lumber camp, smelter, smithy, **armory**, tannery, weaver, tailor, carpenter, mason |
-| Commerce | Market hall, general store, jeweller, bank/moneylender (later), trading post, warehouse |
-| Civic | Town hall, courthouse, jail, stocks/pillory, gallows, guardhouse, walls/gates, well, mint |
-| Education | Village school, grammar school/academy, university, seminary, military academy, library |
-| Religion | Shrine, chapel, temple, cathedral, monastery, graveyard |
-| Health | Herbalist, physician, hospital |
-| Social | Tavern, inn, theatre, festival grounds, bathhouse |
-| Military | Barracks, training yard, stables, siege workshop |
+| **Centre / civic** | Campfire (Camp) → Well (Hamlet) → Town hall (Village) → Guildhall (Town) → Palace / seat of government (Metropolis) · Guardhouse (Village) · Courthouse, jail, stocks, gallows, mint (Town) |
+| **Housing** | Tent, lean-to, hovel, cottage, family house, townhouse, tenement, manor, noble estate, boarding house, almshouse, barracks (see §12.7) |
+| **Food** | Farm field, orchard, ranch, fishery, windmill/watermill, bakery, butcher (Hamlet) · Brewery, winery, dairy (Village) · Market stalls (Hamlet) → Market hall (Town) → Grand bazaar (Metropolis) |
+| **Industry** | Lumber camp, quarry, mine (Hamlet) · Smithy, tannery, weaver, carpenter, mason (Hamlet–Village) · Smelter, tailor, armory, jeweller, glassworks (Village–Town) · Shipyard (Town, coastal) |
+| **Commerce** | General store, warehouse, trading post (Village) · Bank/moneylender, merchant guild (Town) · Docks and harbour (coastal) |
+| **Religion** | Shrine (Hamlet) → Chapel (Village) → Temple (Town) → Cathedral (City) · Monastery, seminary · Graveyard → Crypt / ossuary |
+| **Education** | Village school (Village) · Grammar school/academy (Town) · University (City) · Library → Great library · Military academy |
+| **Health** | Herbalist (Hamlet) · Physician (Town) · Hospital (City) |
+| **Social** | Tavern, inn (Village) · Bathhouse (Town) · Theatre (City) · Festival grounds · Arena (Metropolis) |
+| **Military & defence** | Palisade (Hamlet) → Stone walls, gates, towers (Town) → City walls (City) · Barracks, training yard, stables (Village–Town) · Keep → Castle · Siege workshop |
+| **Infrastructure** | Roads, bridges, plazas, fountains, lamp posts, docks, canals, aqueduct (City) |
+
+**Graveyards** [DECIDED: D31]. With ~5-hour lives, 1M villagers produce ~55 deaths per second worldwide; a town of 2,000 buries someone every ~9 seconds. Physical graves for everyone would swallow the map, so:
+- **Named, physical graves** only for notable villagers: the player's family and friends, rulers, heroes, famous craftsmen, anyone with a chronicle entry.
+- Everyone else is recorded in a **crypt / ossuary ledger** that players can browse (name, family, dates, cause of death, epitaph).
+- Graveyards look full and lived-in but don't grow without bound; they upgrade to crypts and ossuaries as the village grows.
 
 ### 9.3 Buildings as firms
 Productive buildings are businesses with an owner (§17.3), staff, inventory and hours.
@@ -324,6 +340,30 @@ Productive buildings are businesses with an owner (§17.3), staff, inventory and
 ### 10.4 Zoning-driven construction
 - The ruler zones districts (§13.4). **Builders fill zones on their own based on demand** (price and housing signals, §17).
 - The player can **commission** specific buildings and blueprints, overriding demand.
+
+### 10.5 Who builds
+Three sources, all producing the same thing, a **construction project** (plot + blueprint + materials + builders):
+1. **The village planner (sim AI)** builds to meet demand within zones: a housing shortage leads to houses, expensive bread to a bakery, a district with no well within walking distance to a well.
+2. **The ruler:** zoning and specific commissions (§13.4).
+3. **Private owners:** a rich family builds a manor, a successful baker opens a second shop, a guild funds its hall.
+
+Projects reserve a plot, source materials from stockpiles and markets (§17), and are worked by builders (a job). Progress is physical at T0 and reconciled elsewhere (§10.2).
+
+### 10.6 Plots, roads & walls
+- **Villages grow along roads.** Road hierarchy: footpath → dirt road → gravel road → paved street → avenue. Roads are **upgraded as traffic grows**; traffic is measured from the road graph villagers already travel.
+- **Plots** are laid out along roads. Buildings go on plots that fit their footprint; plots in busy districts are **subdivided as land value rises**.
+- **Squares and plazas** form at important crossroads and become market or temple squares.
+- **Walls grow in rings:** palisade → stone wall. When the town outgrows it, a new ring goes up further out and the old one stays inside, as in real medieval cities.
+- Terrain is adapted per plot (foundations, terracing, stilts, retaining walls) according to culture and biome.
+
+### 10.7 Building lifecycle
+[DECIDED: D33] **Planned → under construction → active → upgraded → (repurposed / neglected / damaged) → demolished or ruined**
+- **Levels 1–5** per building type (MineColonies-style). Higher levels change the blueprint, raise capacity and output quality, and upgrade materials (§12.8).
+- **Repurposing:** a failed bakery can be bought and turned into a tavern. The shell stays; the interior, sign and advertisements change.
+- **Neglect:** unmaintained buildings visibly decay (cracked stone, broken windows, cobwebs, overgrowth) and can be repaired.
+- **Damage:** fire, war, raids and zombie sieges. Rebuilding creates construction jobs.
+- **Ruins:** buildings in abandoned villages, or destroyed and never rebuilt, become ruins (§12.4).
+- All transitions go through reconciliation, so they play out while the player is away.
 
 ---
 
@@ -358,7 +398,7 @@ Villagers who matter to the player (spouse, children, close friends, active ques
 
 ---
 
-## 12. Villages, Districts & Cultures
+## 12. Villages: Districts, Cultures, Growth, Housing & Architecture
 
 ### 12.1 Districts
 [DECIDED: D8] Semantic, named districts with a zoning purpose, their own approval rating, crime rate, character and gossip network. They are the unit of government (district governors), statistics and threading.
@@ -385,6 +425,121 @@ Every pre-spawned village has a **culture archetype** [DECIDED: D17] that sets d
 - ~5,000 villages at ~200 average, but sizes vary widely, including mega-cities of tens of thousands.
 - Populations come from worldgen placement plus organic growth (founding, migration, births). [OPEN: ratio]
 
+### 12.4 Village stages
+[DECIDED: D26] A village's stage depends on **population and institutions** (Anno/Civilization-style): reaching a stage needs both a population threshold and certain buildings.
+
+| Stage | Population | Requires | Unlocks |
+|---|---|---|---|
+| **Camp** | 3–15 | A campfire and a claimed site | Tents, lean-tos, a well |
+| **Hamlet** | 15–50 | Houses, a farm, a well | Basic trades (bakery, smithy), shrine, market stalls, palisade |
+| **Village** | 50–250 | Chapel, tavern, village school | First districts, guilds, town hall → **council government** |
+| **Town** | 250–2,500 | Town hall, market hall, walls | Multiple districts, grammar school, temple, courthouse, mint, **democracy / republic** |
+| **City** | 2,500–25,000 | Cathedral or great temple, university | Guild halls, hospital, theatre, city walls with towers, noble quarter |
+| **Metropolis / capital** | 25,000+ | Palace or grand seat of government | Arena, grand bazaar, great library, vassal villages |
+
+**Decline and ruins.** Famine, plague, war or economic collapse can lower a village's stage (institutions close, districts empty, buildings decay). A village that empties completely becomes **ruins**. Ruins keep their chronicle, so players can discover the history of a dead town, and they can be resettled.
+
+### 12.5 Layout by culture
+| Culture | Layout |
+|---|---|
+| Farming hamlet | Scattered farmsteads along a road, a small centre |
+| Merchant town | Along a river or coast; docks, dense market core, warehouses |
+| Mining hold | Partly carved into a mountain or cliff; tunnels are part of the village |
+| Pious / monastic | Built around a hilltop monastery or temple |
+| Aristocratic city | Castle at the centre, concentric walls, noble quarter near the castle |
+| Martial | Fort or keep first; barracks, training yards, tight walled layout |
+| Outlaw haven | Hidden (cove, swamp, canyon); stilt houses, docks, caves |
+| Scholarly | Campus-like core of towers and libraries |
+
+### 12.6 Families & households
+[DECIDED: D32]
+- **Family** = kinship (parents, children, grandparents, cousins). Part of the relationship graph (§8); can span many households.
+- **Household** = the people who **live together and share a budget**. The economic unit (§17.3) and what a home is assigned to.
+- **Typical household: 2–6 people.** Usually a couple and their children; some cultures add grandparents or unmarried siblings (**extended households**).
+- **Children per couple:** a distribution averaging roughly 2–4, shaped by culture, faith, wealth, housing space and approval of the ruler.
+- **Timing:** at the default lifespan, adulthood lasts ~2.3 real hours (§5.2), so a couple has about an hour to have children. Families form and grow within one long session.
+
+**Moving out** [DECIDED: D29] is culture-dependent:
+- **Default:** young adults stay home until they **marry or can afford their own place**, then form a new household and move out.
+- **Individualist cultures** (merchant, scholarly) push young adults out early. **Family cultures** (farming, pious) keep extended households; a son may bring his wife home to the family farm.
+- **Life paths bring their own housing:** apprentices at the master's workshop, students in university halls, soldiers in barracks, clergy in the monastery, single workers in a **boarding house, inn or tenement**.
+- **Elders** stay in their home, move in with a child, or go to an almshouse or monastery.
+- **Inheritance:** when owners die, the home passes to heirs (§13.8, §17.8).
+- **No free housing:** stay with parents (overcrowding → unhappiness), rent a room at an inn, or become **homeless** (sleeping rough → crime and petitions). This pressure drives the village planner to build (§10.5).
+
+### 12.7 Housing
+- **The bed is the unit of housing capacity.** A blueprint's beds decide how many people it holds (vanilla beds are detected automatically, [ARCHITECTURE §13.5](ARCHITECTURE.md#135-optional-vanilla-integrations)).
+- Households **own, rent, or are assigned** homes (state housing, barracks, servants' quarters).
+
+| Type | Beds | For |
+|---|---|---|
+| Tent / lean-to | 1–2 | Camp stage, the poorest |
+| Hovel | 2–3 | Labourers |
+| Cottage | 3–5 | Rural families |
+| Family house | 4–6 | Artisans |
+| Townhouse (row house, shared walls, 2–3 storeys) | 4–6 | Dense town districts |
+| Tenement (several households) | 12–30 | Dense poor districts in cities |
+| Boarding house | 6–20 single beds | Single workers, newcomers |
+| Manor | 6–10 + servants | Merchants, lesser nobles |
+| Noble estate / palace | 10+ + servants | Nobility, rulers |
+| Barracks / dormitory / cloister | 10–50 | Soldiers, students, clergy |
+| Almshouse | 6–20 | Elders, the destitute |
+
+### 12.8 Architecture & look
+**Style = culture × biome × wealth/level.**
+
+| Culture | Look |
+|---|---|
+| Farming hamlet | Thatch roofs, wattle and daub, timber frames, fences, haystacks |
+| Merchant town | Tall timber-frame houses with overhanging upper floors, coloured plaster, shopfronts with hanging signs, busy docks |
+| Mining hold | Heavy stone and deepslate, built into cliffs, lantern-lit tunnels, mine carts |
+| Pious / monastic | Whitewashed stone, bell towers, cloisters, gardens |
+| Martial | Palisades to stone keeps, towers, banners, training yards |
+| Aristocratic | Brick and dressed stone, formal gardens, manors, a castle |
+| Outlaw haven | Ramshackle wood, stilts, rope bridges, hidden caves |
+| Scholarly | Stone towers, domes, libraries, observatories |
+
+- **Biome variants:** desert (sandstone, terracotta, flat roofs), snow (spruce, steep roofs), jungle and swamp (stilts), badlands (terracotta), cherry grove (cherry wood, pink accents), etc.
+- **Wealth and level show in materials:** the same bakery goes from wattle and thatch (level 1) to timber frame (level 3) to stone with glass windows (level 5).
+- **Living decoration** reflects sim state (applied through reconciliation):
+  - market stalls **stocked** in good times, **empty in a famine**
+  - banners and flowers during festivals; black cloth after a ruler's death
+  - decay when neglected, scorch marks after fire, damage after raids
+- **Shop signs** show the product (bread, sword, tankard) so players can read a town at a glance.
+- **Furnished interiors** everywhere: embodied villagers need real workstations, tables and beds to animate at.
+
+**Blocks** [DECIDED: D30]: **prefer vanilla blocks whenever possible.** Custom blocks only where vanilla can't express something essential, for example:
+- functional blocks: building anchor, market stall, shop sign, stocks/pillory, gallows
+- a small set of decorative blocks that vanilla lacks and the look depends on (e.g. **thatch**)
+
+Every custom block needs a written reason; vanilla-only builds should still read correctly.
+
+### 12.9 Content pipeline
+[DECIDED: D27, D28] Building types × levels × cultures × biomes adds up to thousands of variants, far too many to hand-build. The pipeline has three layers:
+
+1. **Hand-built landmarks:** town hall, cathedral, castle, palace, university, guildhalls. A few per culture, high quality.
+2. **Modular kits** for everything else: houses, shops and workshops **assembled from authored pieces** (foundations, wall bays, roofs, facades, interior sets), sized to the plot.
+3. **Palette swapping:** pieces are authored once in a **neutral palette** and remapped per culture, biome and level (oak → spruce, cobblestone → sandstone, thatch → tile). One piece set covers many looks.
+
+**Format:** vanilla structure `.nbt` + metadata JSON (workstations, beds, doors, storage, capacity, kit sockets), per [ARCHITECTURE §13.1](ARCHITECTURE.md#131-buildings).
+
+**Authoring tools:**
+- **Structure Lab (`D:\MinecraftMods\MinecraftStructureInjector`)** for **agentic building**. It's a NeoForge 1.21.1 mod plus an MCP server that lets an AI agent:
+  - generate `.nbt` structures (Python builder library or JSON `set`/`fill`/`room` operations),
+  - validate them against live registries,
+  - place each revision in a dedicated superflat lab world and capture labelled screenshots for review,
+  - run **native walking tests** (a real player hitbox walking defined routes), which we'll use to prove villagers can path through doors, stairs and workstations,
+  - export clean `.nbt` + datapack files.
+
+  Landmarks, kit pieces and interior sets are built and reviewed in this loop, then given our metadata JSON.
+- **In-game structure editor** (our mod) for players, builders and pack makers:
+  - capture a region into a blueprint or kit piece
+  - place and edit metadata markers visually: workstations, beds, doors, storage, kit sockets, sign and decoration slots
+  - mark palette roles (e.g. "primary wood", "roof", "wall fill") for palette swapping
+  - preview a piece in every culture × biome × level palette
+  - validate (walkability, capacity, required markers) and export to a datapack
+
+---
 ---
 
 ## 13. Governance
@@ -757,6 +912,7 @@ Server config (initial list):
 | Offscreen building/mining disagreeing with the observed world | Per-section blueprints and deterministic reconciliation (§10) |
 | Save size & format evolution | Custom storage with versioning from day one |
 | Scope | Strict phasing (§23); macro-first with micro-compatibility rules (§19) |
+| Building content volume (types × levels × cultures × biomes) | Modular kits + palette swapping; agentic authoring with Structure Lab; in-game editor (§12.9) |
 
 ---
 
@@ -764,13 +920,13 @@ Server config (initial list):
 
 | Phase | Scope | Exit criteria |
 |---|---|---|
-| **1. Vertical slice (in Minecraft)** | Sim core + expression language + base modules (lifecycle, needs, plans, buildings, social), bridge with tier manager and puppet entities, one ~30-villager village, debug tools, KubeJS skeleton; headless benchmark on the same code | Walk through a mixed-tier village with no teleporting or state loss; benchmark trending toward 1M (see [ARCHITECTURE.md §21](ARCHITECTURE.md#21-phase-1-plan-vertical-slice)) |
+| **1. Vertical slice (in Minecraft)** | Sim core + expression language + base modules (lifecycle, needs, plans, buildings, social), bridge with tier manager and puppet entities, one ~30-villager village (house, bakery and tavern blueprints built with Structure Lab), debug tools, KubeJS skeleton; headless benchmark on the same code | Walk through a mixed-tier village with no teleporting or state loss; benchmark trending toward 1M (see [ARCHITECTURE.md §21](ARCHITECTURE.md#21-phase-1-plan-vertical-slice)) |
 | **2. Scale & persistence** | Districts + message passing at scale, custom persistence backend, life clock, basic economy loop, venue-tier interactions | **1M villagers run headless at a sustainable real-time rate**; economy soak test is stable |
 | **3. Player agent** | Player record, dialogue, gifts, relationships, romance/marriage, children, quests from wants, gossip reputation, attention pinning | Befriend/marry a villager, have a child who grows up in the sim |
-| **4. Economy & buildings** | Goods catalogue, firms, markets, labour, classes, housing, currency/minting | Prices respond to player actions; builders respond to demand |
+| **4. Economy & buildings** | Goods catalogue, firms, markets, labour, classes, households & housing assignment (§12.6–12.7), currency/minting | Prices respond to player actions; builders respond to demand |
 | **5. Governance MVP** | Found + Elected paths; town hall; zoning; treasury & taxes; ~5 schedule-changing laws; approval per district; petitions; monarchy + democracy procedures | Rule a village; pass a law and see behaviour change |
 | **6. Crime MVP** | ~10 core acts; law book with conditions; 3–4 starter cultures; witness → report → magistrate → punishment (full spectrum, config-gated); T2 statistical crime | Ruler redefines a crime and the population reacts per its morality |
-| **7. Physical world** | Per-section blueprints, construction & mining with reconciliation, resource sampling | Leave a site, come back, and find it progressed consistently |
+| **7. Physical world & village growth** | Per-section blueprints, construction & mining with reconciliation, resource sampling; village planner, plots & roads, building levels & lifecycle, village stages & decline (§10.5–10.7, §12.4); modular kits + palette swapping; **in-game structure editor**; landmark and kit content built with Structure Lab (§12.9) | Leave a site, come back, and find it progressed consistently; a hamlet grows into a town on its own |
 | **8. Religion & education** | Faiths, temples, clergy, conversion; school levels, apprenticeships, bootstrapping | Education changes jobs and values; faith shapes morality |
 | **9. Models & animation** | Custom villager models, genetics, outfits, animations, crowd LOD | 200+ animated villagers visible at playable FPS |
 | **10. Full governance & dynasty** | All five paths, offices & delegation, all government types, succession, justice procedures, multiplayer co-rule | Inherit a throne; lose an election |
