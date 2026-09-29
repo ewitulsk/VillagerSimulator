@@ -17,6 +17,10 @@ import java.util.function.LongSupplier;
  * The event log. Record ids are {@code (per-shard counter << 20) | shard}, so shards running in parallel create
  * unique ids without coordinating. Each shard buffers its records during a window; buffers are merged into the log
  * at the boundary in (time, shard, order) order. The log's order is the merge order; persistence saves by position.
+ *
+ * <p>Only recent records stay in memory: once saved, records older than the retention are forgotten
+ * ({@link #forget}). Positions stay absolute, so {@link #size()} counts forgotten records too. Record times never
+ * decrease along the log, so forgotten records are always a prefix.
  */
 final class SimEventLog {
     static final int SHARD_BITS = 20;
@@ -25,6 +29,8 @@ final class SimEventLog {
     private final Map<Id, List<EventRecord>> byType = new HashMap<>();
     private final Map<Integer, List<EventRecord>> byActor = new HashMap<>();
     private long[] counters = new long[16];
+    /** Records forgotten from the front of the log. */
+    private int offset;
 
     /** A shard's writer: buffers records until the boundary merges them. */
     final class Writer implements EventLog {
@@ -60,7 +66,7 @@ final class SimEventLog {
 
         @Override
         public int size() {
-            return records.size();
+            return SimEventLog.this.size();
         }
     }
 
@@ -104,12 +110,56 @@ final class SimEventLog {
         return Collections.unmodifiableList(byActor.getOrDefault(actor.raw(), List.of()));
     }
 
+    /** Every record ever logged, including forgotten ones. */
     int size() {
+        return offset + records.size();
+    }
+
+    /** Records in memory. */
+    int retained() {
         return records.size();
     }
 
-    /** Records from position {@code from} on, in log order. */
+    /** Records from absolute position {@code from} on, in log order (forgotten ones are skipped). */
     List<EventRecord> from(int from) {
-        return List.copyOf(records.subList(Math.min(from, records.size()), records.size()));
+        int start = Math.max(0, Math.min(from - offset, records.size()));
+        return List.copyOf(records.subList(start, records.size()));
+    }
+
+    /** Starts the log after {@code forgotten} records that are saved but not loaded (loading a save). */
+    void startAfter(int forgotten) {
+        if (!records.isEmpty() || offset != 0) throw new IllegalStateException("Log already has records");
+        offset = forgotten;
+    }
+
+    /**
+     * Forgets records at absolute positions below {@code saved} (they're persisted) that are older than
+     * {@code before}. Returns how many were forgotten.
+     */
+    int forget(int saved, long before) {
+        int n = 0;
+        while (n < records.size() && offset + n < saved && records.get(n).time() < before) n++;
+        if (n == 0) return 0;
+        Map<Id, Integer> types = new HashMap<>();
+        Map<Integer, Integer> actors = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            EventRecord r = records.get(i);
+            types.merge(r.type(), 1, Integer::sum);
+            actors.merge(r.actor().raw(), 1, Integer::sum);
+        }
+        // Forgotten records are the oldest, so they're at the front of every index list too.
+        types.forEach((type, count) -> {
+            List<EventRecord> list = byType.get(type);
+            list.subList(0, count).clear();
+            if (list.isEmpty()) byType.remove(type);
+        });
+        actors.forEach((actor, count) -> {
+            List<EventRecord> list = byActor.get(actor);
+            list.subList(0, count).clear();
+            if (list.isEmpty()) byActor.remove(actor);
+        });
+        records.subList(0, n).clear();
+        offset += n;
+        return n;
     }
 }

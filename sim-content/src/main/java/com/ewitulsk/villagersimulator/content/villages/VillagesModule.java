@@ -32,7 +32,9 @@ public final class VillagesModule implements SimModule {
         r.component(Appearance.COMPONENT);
         r.component(Villages.DISTRICT);
         r.component(Roads.COMPONENT);
+        r.component(VillageTiers.COMPONENT);
         r.view(Villages.DISTRICTS, Villages::districts);
+        r.view(VillageTiers.VIEW, VillageTiers::summaries);
         // True when the venue is the actor's home / workplace.
         r.function(ExpressionFunction.bool("is_home", List.of(), (env, a) -> {
             Villager v = env.actor().isNone() ? null : env.sim().get(env.actor(), Villages.VILLAGER);

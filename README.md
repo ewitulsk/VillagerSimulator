@@ -4,7 +4,7 @@ A NeoForge 1.21.1 mod: a village simulation engine aiming at a million villagers
 
 - [docs/DESIGN.md](docs/DESIGN.md): what the game is
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it's built
-- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village), Phase 4 (Villagers With a Face), Phase 5 (Districts & Seamless Tiers).**
+- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village), Phase 4 (Villagers With a Face), Phase 5 (Districts & Seamless Tiers), Phase 6 (Scale Gate).**
 
 ## Project layout
 
@@ -14,6 +14,7 @@ A NeoForge 1.21.1 mod: a village simulation engine aiming at a million villagers
 | `sim-core` | The engine: storage, event scheduler, runtime thread, SQLite persistence |
 | `sim-content` | Base game modules (needs, buildings, villages, plans), built only on `sim-api` |
 | `sim-harness` | Headless scenario DSL; scenario tests run in virtual time |
+| `sim-bench` | The 1M-villager scale benchmark and JMH micro-benchmarks ([docs/SCALE.md](docs/SCALE.md)) |
 | `neoforge` | The mod: bridge, villager puppets, blueprints, `/vs` commands, GameTests |
 | `tools/blueprints` | Structure Lab scripts that generate the blueprints and their building-type JSON |
 
@@ -77,6 +78,8 @@ In a creative overworld (cheats on):
 **Seamless tiers.** Villagers within 48 blocks are embodied (T0), others in loaded chunks are T1, unloaded ones within 256 blocks are T2, and beyond that villages are simulated a day at a time (T3), unless a villager matters to a player (a friend, an appointment), in which case they're pinned to T2. Tier changes never teleport anyone: villagers appear where their schedule and route put them. `/vs debug overlay` draws chunk tiers (T0 green, T1 yellow, T2 orange, T3 red), district borders and walking routes.
 
 Walk more than 48 blocks away and the villagers become abstract (T2) while their days carry on. Come back and they're where their schedule says. The sim is saved in `<world>/villagersimulator/sim.db`.
+
+**Scale.** One million villagers simulate at 0.04% of real time in 763 MB ([docs/SCALE.md](docs/SCALE.md)). `/vs stress <villagers>` adds sim-only towns far away to try it in game, and `/vs profile [reset]` shows the server tick time, villagers per tier, and where the sim spends its time. Benchmarks: `./gradlew :sim-bench:scale` (1M villagers headless) and `./gradlew :sim-bench:jmh`.
 
 **Config** (`config/villagersimulator-common.toml`): `sim.debugTimeScale` speeds up sim time for playtesting; `tiers.t0Radius` sets the embodiment distance, `tiers.t3Radius` the day-batch distance, `sim.workerThreads` the village threads.
 

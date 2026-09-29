@@ -129,6 +129,7 @@ Cautionary note: Dwarf Fortress removed its original economy because it was too 
 - **Semantic districts** [DECIDED: D8] are the social, political and threading unit (e.g. "Market Quarter", "Mining District"). A district can itself be partly loaded, so **the loading tier is computed per chunk inside a district.**
   - *Districts for meaning, chunks for loading.*
 - A villager's tier is the tier of the chunk they're in (plus attention pinning, §11.6). A commuter can pass T3 → T2 → T0 in one morning.
+- **As built (Phase 6):** the bridge first gives each village a mode. A village is *detailed* when a player is near or it is in loaded chunks, and then each villager's tier comes from where they are. It is *abstract* (all T2) otherwise, and *coarse* (all T3) beyond the T3 radius of every player. A village that far away has no chunks near a player anyway. Doing it per village keeps the bridge's work proportional to villages rather than villagers ([SCALE.md](SCALE.md)).
 
 ### 4.4 The plan is the source of truth
 Every villager always holds a **timestamped itinerary** (§7). Tiers only change how the plan is carried out:
@@ -167,6 +168,7 @@ Needs and other continuous values are stored as `(value at t0, rate)` and evalua
 - **Format versioning from day one.**
 
 ### 4.10 Budgets (targets to validate in Phase 1)
+Measured in Phase 6: see [SCALE.md](SCALE.md). 1M villagers at T3 take 0.45 s per sim-day (0.04% of real time) and 763 MB.
 | Item | Estimate |
 |---|---|
 | Core state per villager | ~150–300 bytes → 150–300 MB for 1M |

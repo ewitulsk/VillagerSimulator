@@ -78,12 +78,17 @@ public final class SimWorld implements SimContext, AutoCloseable {
     public static final int SNAPSHOT_FORMAT = SnapshotCodec.FORMAT;
     /** Length of a synchronisation window in ticks; also the delay of cross-shard effects. Divides a day. */
     public static final long WINDOW = 200;
+    /** Saved event records older than this (3 sim-days) are dropped from memory at the next snapshot. */
+    public static final long DEFAULT_EVENT_RETENTION = 3 * 24_000L;
 
     private final List<SimModule> modules;
     final Map<Id, DenseStore> dense = new LinkedHashMap<>();
     private final Map<DenseComponent, DenseStore> denseByComponent = new IdentityHashMap<>();
     final Map<Id, SparseStore<?>> sparse = new LinkedHashMap<>();
     private final Map<SparseComponent<?>, SparseStore<?>> sparseByComponent = new IdentityHashMap<>();
+    // The same, indexed by component serial: store lookup is on every component access.
+    private DenseStore[] denseBySerial = new DenseStore[0];
+    private SparseStore<?>[] sparseBySerial = new SparseStore<?>[0];
     final Map<Id, TaskType> tasks = new LinkedHashMap<>();
     private final Map<Id, Activity> activities = new LinkedHashMap<>();
     private final Map<Id, SimRegistryImpl<?>> registries = new LinkedHashMap<>();
@@ -109,9 +114,14 @@ public final class SimWorld implements SimContext, AutoCloseable {
     /** Sections of a loaded save that no registered component claims (e.g. a removed addon); written back as-is. */
     final Map<Id, byte[]> unknownSections = new LinkedHashMap<>();
     private final int threads;
+    /** How long saved event records stay in memory (docs/ROADMAP.md Phase 6). */
+    private long eventRetention = DEFAULT_EVENT_RETENTION;
     private ExecutorService pool;
     private DataSource data;
     private long now;
+    // Profiling (SimProfile): engine phases and views, measured on the thread that owns the world.
+    private final Map<String, long[]> engineProfile = new LinkedHashMap<>();
+    private long profileTicks, profileWall;
 
     private SimWorld(List<SimModule> modules, DataSource data, int threads) {
         this.modules = modules;
@@ -129,6 +139,13 @@ public final class SimWorld implements SimContext, AutoCloseable {
         private DataSource data = folder -> Map.of();
         private long startTime;
         private int threads = 1;
+        private long eventRetention = DEFAULT_EVENT_RETENTION;
+
+        /** How long saved event records stay in memory; older ones only live in the save. */
+        public Builder eventRetention(long ticks) {
+            this.eventRetention = ticks;
+            return this;
+        }
 
         public Builder module(SimModule module) {
             modules.add(module);
@@ -159,6 +176,7 @@ public final class SimWorld implements SimContext, AutoCloseable {
         public SimWorld build() {
             SimWorld world = new SimWorld(List.copyOf(sortModules(modules)), data, threads);
             world.now = startTime;
+            world.eventRetention = eventRetention;
             world.registerAll();
             return world;
         }
@@ -246,6 +264,8 @@ public final class SimWorld implements SimContext, AutoCloseable {
             DenseStore store = new DenseStore(component);
             dense.put(component.id(), store);
             denseByComponent.put(component, store);
+            if (component.serial() >= denseBySerial.length) denseBySerial = Arrays.copyOf(denseBySerial, component.serial() + 16);
+            denseBySerial[component.serial()] = store;
         }
 
         @Override
@@ -256,6 +276,8 @@ public final class SimWorld implements SimContext, AutoCloseable {
             SparseStore<?> store = new SparseStore<>(component);
             sparse.put(component.id(), store);
             sparseByComponent.put(component, store);
+            if (component.serial() >= sparseBySerial.length) sparseBySerial = Arrays.copyOf(sparseBySerial, component.serial() + 16);
+            sparseBySerial[component.serial()] = store;
         }
 
         @Override
@@ -326,12 +348,45 @@ public final class SimWorld implements SimContext, AutoCloseable {
      * Windows end on multiples of {@link #WINDOW} (and at {@code time}).
      */
     public void advanceTo(long time) {
+        long start = System.nanoTime(), from = now;
         while (true) {
             long end = Math.min(time, (Math.floorDiv(now, WINDOW) + 1) * WINDOW);
             runWindow(end);
             if (end > now) now = end;
-            if (end >= time) return;
+            if (end >= time) break;
         }
+        profileTicks += Math.max(0, now - from);
+        profileWall += System.nanoTime() - start;
+    }
+
+    private void profileEngine(String name, long nanos) {
+        long[] a = engineProfile.computeIfAbsent(name, k -> new long[2]);
+        a[0]++;
+        a[1] += nanos;
+    }
+
+    /** Where time went since the last {@link #resetProfile()}. */
+    public SimProfile profile() {
+        Map<String, long[]> tasksByName = new java.util.TreeMap<>();
+        for (ShardContext c : contexts) {
+            c.profile.forEach((type, a) -> {
+                long[] t = tasksByName.computeIfAbsent(type.id().toString(), k -> new long[2]);
+                t[0] += a[0];
+                t[1] += a[1];
+            });
+        }
+        List<SimProfile.Entry> out = new ArrayList<>();
+        tasksByName.forEach((n, a) -> out.add(new SimProfile.Entry("task", n, a[0], a[1])));
+        engineProfile.forEach((n, a) -> out.add(new SimProfile.Entry(n.startsWith("view ") ? "view" : "engine",
+                n.startsWith("view ") ? n.substring(5) : n, a[0], a[1])));
+        return new SimProfile(profileTicks, profileWall, List.copyOf(out));
+    }
+
+    public void resetProfile() {
+        for (ShardContext c : contexts) c.profile.clear();
+        engineProfile.clear();
+        profileTicks = 0;
+        profileWall = 0;
     }
 
     private void runWindow(long end) {
@@ -342,6 +397,7 @@ public final class SimWorld implements SimContext, AutoCloseable {
                 if (t != null && t.time() <= end) active.add(contexts.get(s));
             }
             if (active.isEmpty()) return;
+            long t0 = System.nanoTime();
             if (threads == 1 || active.size() == 1) {
                 for (ShardContext c : active) c.run(end);
             } else {
@@ -367,6 +423,8 @@ public final class SimWorld implements SimContext, AutoCloseable {
                     throw new IllegalStateException(cause);
                 }
             }
+            long t1 = System.nanoTime();
+            profileEngine("shards (wall)", t1 - t0);
             // Boundary: apply deferred cross-shard writes in shard order, then merge event records.
             long saved = now;
             now = end;
@@ -375,6 +433,7 @@ public final class SimWorld implements SimContext, AutoCloseable {
             for (ShardContext c : contexts) writers.add(c.events);
             eventLog.merge(writers);
             now = Math.max(saved, now);
+            profileEngine("boundary", System.nanoTime() - t1);
         }
     }
 
@@ -388,7 +447,11 @@ public final class SimWorld implements SimContext, AutoCloseable {
 
     public SimViewsImpl snapshotViews() {
         Map<ViewKey<?>, Object> out = new LinkedHashMap<>();
-        views.forEach((key, provider) -> out.put(key, provider.snapshot(this)));
+        views.forEach((key, provider) -> {
+            long t = System.nanoTime();
+            out.put(key, provider.snapshot(this));
+            profileEngine("view " + key.id(), System.nanoTime() - t);
+        });
         return new SimViewsImpl(now, out);
     }
 
@@ -422,14 +485,16 @@ public final class SimWorld implements SimContext, AutoCloseable {
     // ------------------------------------------------------------------------------------------------ storage access
 
     private DenseStore store(DenseComponent c) {
-        DenseStore s = denseByComponent.get(c);
+        int k = c.serial();
+        DenseStore s = k < denseBySerial.length ? denseBySerial[k] : null;
         if (s == null) throw new IllegalArgumentException("Component " + c.id() + " is not registered");
         return s;
     }
 
     @SuppressWarnings("unchecked")
     private <T> SparseStore<T> store(SparseComponent<T> c) {
-        SparseStore<?> s = sparseByComponent.get(c);
+        int k = c.serial();
+        SparseStore<?> s = k < sparseBySerial.length ? sparseBySerial[k] : null;
         if (s == null) throw new IllegalArgumentException("Component " + c.id() + " is not registered");
         return (SparseStore<T>) s;
     }
@@ -669,6 +734,8 @@ public final class SimWorld implements SimContext, AutoCloseable {
     final class ShardContext implements SimContext {
         private final int shard;
         private final List<Runnable> deferred = new ArrayList<>();
+        /** Per task type: calls, nanos. Only this shard's worker writes it. */
+        final Map<TaskType, long[]> profile = new IdentityHashMap<>();
         final SimEventLog.Writer events;
         private final StatsImpl shardStats;
         private final Relationships shardRelationships;
@@ -688,7 +755,11 @@ public final class SimWorld implements SimContext, AutoCloseable {
             while ((t = q.peek()) != null && t.time() <= end) {
                 q.poll();
                 time = Math.max(t.time(), SimWorld.this.now);
+                long start = System.nanoTime();
                 t.type().handler().run(this, new EntityId(t.target()), t.arg());
+                long[] a = profile.computeIfAbsent(t.type(), k -> new long[2]);
+                a[0]++;
+                a[1] += System.nanoTime() - start;
             }
         }
 
@@ -951,12 +1022,29 @@ public final class SimWorld implements SimContext, AutoCloseable {
      * already saved (the log's first {@code savedEvents} records).
      */
     public Snapshot snapshot(int savedEvents) {
-        return new Snapshot(now, SnapshotCodec.write(this), eventLog.from(savedEvents));
+        Snapshot s = new Snapshot(now, SnapshotCodec.write(this), eventLog.from(savedEvents));
+        eventLog.forget(savedEvents, now - eventRetention);
+        return s;
+    }
+
+    /** Event records held in memory (the rest are only in the save). */
+    public int retainedEvents() {
+        return eventLog.retained();
+    }
+
+    public long eventRetention() {
+        return eventRetention;
     }
 
     /** Restores a snapshot into this freshly built world. */
     public void restore(byte[] data, List<EventRecord> events) {
+        restore(data, events, 0);
+    }
+
+    /** Restores a snapshot whose first {@code forgotten} event records were left in the save. */
+    public void restore(byte[] data, List<EventRecord> events, int forgotten) {
         if (entities.count() != 0 || pendingTasks() != 0) throw new IllegalStateException("Restore into a fresh world only");
+        eventLog.startAfter(forgotten);
         SnapshotCodec.read(this, data);
         for (EventRecord r : events) eventLog.add(r);
     }

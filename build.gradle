@@ -15,7 +15,7 @@ ext {
     junitVersion = '5.11.4'
 }
 
-def simProjects = ['sim-api', 'sim-core', 'sim-content', 'sim-harness']
+def simProjects = ['sim-api', 'sim-core', 'sim-content', 'sim-harness', 'sim-bench']
 
 subprojects {
     group = mod_group_id
@@ -50,6 +50,7 @@ def allowedDependencies = [
         'sim-core'   : [':sim-api'],
         'sim-content': [':sim-api'],
         'sim-harness': [':sim-api', ':sim-core', ':sim-content'],
+        'sim-bench'  : [':sim-api', ':sim-core', ':sim-content', ':sim-harness'],
         'neoforge'   : [':sim-api', ':sim-core', ':sim-content'],
 ]
 

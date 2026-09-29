@@ -11,9 +11,12 @@ import java.util.PriorityQueue;
 public final class Scheduler {
     public record Task(long time, int priority, long seq, TaskType type, int target, long arg) {}
 
-    public static final Comparator<Task> ORDER = Comparator.comparingLong(Task::time)
-            .thenComparingInt(Task::priority)
-            .thenComparingLong(Task::seq);
+    public static final Comparator<Task> ORDER = (a, b) -> {
+        int c = Long.compare(a.time, b.time);
+        if (c != 0) return c;
+        c = Integer.compare(a.priority, b.priority);
+        return c != 0 ? c : Long.compare(a.seq, b.seq);
+    };
 
     private final PriorityQueue<Task> queue = new PriorityQueue<>(ORDER);
     private long nextSeq;

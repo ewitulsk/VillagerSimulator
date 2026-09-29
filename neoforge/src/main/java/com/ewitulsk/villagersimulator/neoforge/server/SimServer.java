@@ -56,7 +56,7 @@ public final class SimServer {
         Path file = server.getWorldPath(LevelResource.ROOT).resolve("villagersimulator").resolve("sim.db");
         this.store = SqliteSimStore.open(file);
         SimWorld world = newWorld(overworld.getDayTime());
-        store.load().ifPresent(saved -> world.restore(saved.data(), saved.events()));
+        store.load(world.eventRetention()).ifPresent(saved -> world.restore(saved.data(), saved.events(), saved.forgotten()));
         LOG.info("Sim started: {} modules, {} entities, time {} ({})", modules.size(), world.entityCount(), world.now(), file);
         logProblems(world.problems());
 

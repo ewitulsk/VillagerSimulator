@@ -189,4 +189,39 @@ class DistrictsAndTiersTest {
         assertTrue(heard.size() > 2, "gossip spread across shards");
         s.world().close();
     }
+
+    /** Phase 6: a whole village goes coarse at once, keeps no plans, stays fed, and comes back to today's plan. */
+    @Test
+    void wholeVillagesGoCoarseAndComeBack() {
+        Scenario s = Scenario.start(SimTime.hours(4));
+        EntityId village = s.spawnHamlet("Farford", 9, 8);
+        List<EntityId> residents = s.village(village).residents();
+        EntityId friend = residents.get(0);
+        EntityId me = join(s, "Alex");
+        s.world().relationships().changeFriendship(friend, me, 50);
+        s.warp(SimTime.days(1)); // pins refresh when days are planned
+        s.apply(new com.ewitulsk.villagersimulator.content.villages.VillageTiers.SetMode(village, com.ewitulsk.villagersimulator.content.villages.VillageTiers.COARSE));
+        assertTrue(com.ewitulsk.villagersimulator.content.villages.VillageTiers.coarse(s.world(), village));
+        assertEquals(Tier.T2, CoreComponents.tier(s.world(), friend), "the player's friend stays detailed");
+        for (EntityId r : residents.subList(1, residents.size())) {
+            assertEquals(Tier.T3, CoreComponents.tier(s.world(), r));
+            assertEquals(null, s.world().get(r, Plans.PLAN), "coarse villagers keep no plan");
+        }
+        Set<EntityId> embodied = new HashSet<>();
+        for (var e : s.world().snapshotViews().get(com.ewitulsk.villagersimulator.api.sim.core.Embodiment.VIEW)) embodied.add(e.id());
+        assertTrue(embodied.isEmpty(), "only detailed villages are in the embodiment view");
+
+        s.warp(SimTime.days(3));
+        assertEquals(0, s.events(Plans.EVENT_STARVING), "fed while coarse");
+        s.apply(new com.ewitulsk.villagersimulator.content.villages.VillageTiers.SetMode(village, com.ewitulsk.villagersimulator.content.villages.VillageTiers.ABSTRACT));
+        for (EntityId r : residents) {
+            assertEquals(Tier.T2, CoreComponents.tier(s.world(), r));
+            assertEquals(SimTime.day(s.now()), s.world().get(r, Plans.PLAN).day(), "back on today's plan");
+        }
+        s.apply(new com.ewitulsk.villagersimulator.content.villages.VillageTiers.SetMode(village, com.ewitulsk.villagersimulator.content.villages.VillageTiers.DETAILED));
+        assertEquals(residents.size(), s.world().snapshotViews().get(com.ewitulsk.villagersimulator.api.sim.core.Embodiment.VIEW).size());
+        var summary = s.world().snapshotViews().get(com.ewitulsk.villagersimulator.content.villages.VillageTiers.VIEW);
+        assertEquals(1, summary.size());
+        assertTrue(summary.get(0).radius() > 16);
+    }
 }

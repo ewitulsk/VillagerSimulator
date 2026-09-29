@@ -3,6 +3,7 @@ package com.ewitulsk.villagersimulator.neoforge.server;
 import com.ewitulsk.villagersimulator.api.sim.EntityId;
 import com.ewitulsk.villagersimulator.api.sim.core.Embodiment;
 import com.ewitulsk.villagersimulator.api.sim.core.SetTiersCommand;
+import com.ewitulsk.villagersimulator.content.villages.VillageTiers;
 import com.ewitulsk.villagersimulator.api.sim.core.Tier;
 import com.ewitulsk.villagersimulator.api.sim.view.SimViews;
 import com.ewitulsk.villagersimulator.content.social.Social;
@@ -117,9 +118,30 @@ public final class SimBridge {
                 }
             }
             Tier want = tierFor(level, players, e.x(), e.y(), e.z(), near);
+            if (want == Tier.T3) want = Tier.T2; // T3 is decided per village, below
             if (want != e.tier()) changes.put(e.id(), want);
         }
         if (!changes.isEmpty()) runtime.submit(new SetTiersCommand(Map.copyOf(changes)));
+        updateVillageTiers(level, players);
+    }
+
+    /**
+     * Village modes (docs/ROADMAP.md Phase 6): detailed when a player is near or the centre is in a ticking chunk
+     * (villagers then get T0/T1/T2 individually, above); coarse (T3) beyond {@code tiers.t3Radius} of every
+     * player; abstract (T2) in between, or everywhere unloaded while nobody is online.
+     */
+    private void updateVillageTiers(ServerLevel level, List<ServerPlayer> players) {
+        List<VillageTiers.Summary> villages = viewsSeen == null ? null : viewsSeen.get(VillageTiers.VIEW);
+        if (villages == null) return;
+        double far = SimConfig.T3_RADIUS.get(), near = SimConfig.T0_RADIUS.get() + 64;
+        for (VillageTiers.Summary v : villages) {
+            double edge = Double.MAX_VALUE;
+            for (ServerPlayer p : players) edge = Math.min(edge, Math.hypot(p.getX() - v.x(), p.getZ() - v.z()) - v.radius());
+            boolean ticking = level.isPositionEntityTicking(BlockPos.containing(v.x(), level.getSeaLevel(), v.z()));
+            int mode = ticking || edge <= near ? VillageTiers.DETAILED
+                    : !players.isEmpty() && edge > far ? VillageTiers.COARSE : VillageTiers.ABSTRACT;
+            if (mode != v.mode()) runtime.submit(new VillageTiers.SetMode(v.village(), mode));
+        }
     }
 
     /**

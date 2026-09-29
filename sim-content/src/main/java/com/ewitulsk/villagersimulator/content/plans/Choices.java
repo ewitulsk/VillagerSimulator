@@ -99,6 +99,10 @@ public final class Choices {
     /** The base game's considerations. */
     public static final List<Consideration> CONSIDERATIONS = List.of(NEEDS, URGENT, DISTANCE, AD_SCORE, VARIETY_BONUS);
 
+    /** Whether each advertisement is usable ({@link BuildingsModule#check}), by identity; reloads bring new objects. */
+    private static final com.ewitulsk.villagersimulator.api.sim.util.IdentityCache<Advertisement, Boolean> USABLE =
+            new com.ewitulsk.villagersimulator.api.sim.util.IdentityCache<>(4096);
+
     private Choices() {}
 
     /** The best option for the villager at {@code from}, or empty if nothing beats {@link #MIN_SCORE}. */
@@ -123,7 +127,7 @@ public final class Choices {
     /** Scores one option, or returns {@code null} if the villager can't use it right now. */
     public static Option score(SimContext ctx, EntityId actor, Villager villager, EntityId venue, Building building,
                                Advertisement ad, double[] from) {
-        if (BuildingsModule.check(ctx, ad) != null) return null; // reported by the validator
+        if (!USABLE.get(ad, a -> BuildingsModule.check(ctx, a) == null)) return null; // reported by the validator
         ExprEnv env = ExprEnv.of(ctx, actor, venue, from);
         try {
             if (ad.condition().isPresent() && !ctx.logic().condition(ad.condition().get()).test(env)) return null;

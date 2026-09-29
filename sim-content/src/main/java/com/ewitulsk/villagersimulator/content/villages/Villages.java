@@ -47,6 +47,17 @@ public final class Villages {
     }
 
     /** The first building of the villager's village that offers {@code service}. */
+    /** Every building in the village offering {@code service}, in the village's building order. */
+    public static java.util.List<EntityId> services(SimContext ctx, EntityId villageId, String service) {
+        Village v = ctx.get(villageId, VILLAGE);
+        if (v == null) return java.util.List.of();
+        java.util.List<EntityId> out = new java.util.ArrayList<>();
+        for (EntityId b : v.buildings()) {
+            if (ctx.alive(b) && Buildings.type(ctx, b).offers(service)) out.add(b);
+        }
+        return out;
+    }
+
     public static Optional<EntityId> findService(SimContext ctx, EntityId villageId, String service) {
         Village v = ctx.get(villageId, VILLAGE);
         if (v == null) return Optional.empty();

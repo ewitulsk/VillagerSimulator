@@ -103,9 +103,15 @@ public final class Plans {
 
     /** Generates a day, lets contributors add to it, stores it and announces it. */
     private static Plan planDay(SimContext ctx, EntityId v, long day) {
+        Plan plan = generateDay(ctx, v, day);
+        ctx.set(v, PLAN, plan);
+        return plan;
+    }
+
+    /** Generates and announces a day without storing it (T3 keeps no plan between day batches). */
+    private static Plan generateDay(SimContext ctx, EntityId v, long day) {
         Plan plan = DailyPlanner.generate(ctx, v, day);
         for (PlanHooks.PlanContributor c : ctx.extensions(PlanHooks.CONTRIBUTORS)) plan = c.contribute(ctx, v, plan);
-        ctx.set(v, PLAN, plan);
         ctx.publish(new PlanHooks.DayPlanned(v, day));
         return plan;
     }
@@ -115,6 +121,7 @@ public final class Plans {
      * (or has started but covers the span). Returns the new plan, or empty if the time isn't free.
      */
     public static Optional<Plan> commit(Plan plan, PlanEntry entry, long now) {
+        if (plan == null) return Optional.empty();
         List<PlanEntry> entries = plan.entries();
         for (int i = 0; i < entries.size(); i++) {
             PlanEntry e = entries.get(i);
@@ -270,6 +277,8 @@ public final class Plans {
     /**
      * The villager moved to T3 (far from every player): stop entry-by-entry simulation and resolve whole days at once
      * (docs/DESIGN.md §4.2). The current entry is resolved up to now; needs are frozen until the next day batch.
+     * The plan itself is dropped: a T3 villager's day only exists during its day batch, which keeps far-away
+     * villagers small (docs/ROADMAP.md Phase 6).
      */
     public static void goCoarse(SimContext ctx, EntityId v) {
         if (!ctx.has(v, CURSOR) || ctx.get(v, CURSOR_COARSE) != 0) return;
@@ -277,6 +286,8 @@ public final class Plans {
         if (current != null) finish(ctx, v, current);
         ctx.set(v, CURSOR_COARSE, 1);
         ctx.set(v, CURSOR_SEQ, ctx.get(v, CURSOR_SEQ) + 1); // the pending entry task goes stale
+        ctx.remove(v, PLAN);
+        ctx.set(v, CURSOR_INDEX, -1);
         Needs.freeze(ctx, v);
         long next = com.ewitulsk.villagersimulator.api.sim.SimTime.dayStart(ctx.now()) + com.ewitulsk.villagersimulator.api.sim.SimTime.TICKS_PER_DAY;
         ctx.schedule(next, dayBatch(ctx, v), v, ctx.get(v, CURSOR_SEQ));
@@ -304,25 +315,30 @@ public final class Plans {
     private static void coarseDay(SimContext ctx, EntityId v, long arg) {
         if (!ctx.alive(v) || !ctx.has(v, CURSOR) || ctx.get(v, CURSOR_COARSE) == 0 || ctx.get(v, CURSOR_SEQ) != arg) return;
         long day = com.ewitulsk.villagersimulator.api.sim.SimTime.day(ctx.now());
-        Plan plan = planDay(ctx, v, day);
+        Plan plan = generateDay(ctx, v, day);
         for (PlanEntry e : plan.entries()) {
             if (e.activity().equals(BasicActivities.FREE_TIME) || e.ad().isPresent()) continue;
             ctx.activity(e.activity()).simulateAbstract(new ActivityContext(ctx, v, e.venue()), e.start(), e.end());
         }
         var villager = ctx.get(v, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGER);
+        // Up to three meals from the village's eateries, starting at a different one for each villager so the bread
+        // of every bakery gets eaten.
         int meals = 0;
-        EntityId food = villager == null ? EntityId.NONE
-                : com.ewitulsk.villagersimulator.content.villages.Villages.findService(ctx, villager.village(), "eat").orElse(EntityId.NONE);
-        for (int i = 0; i < 3 && !food.isNone(); i++) {
-            int bread = Buildings.stock(ctx, food, Buildings.BREAD);
-            if (bread <= 0) break;
-            Buildings.setStock(ctx, food, Buildings.BREAD, bread - 1);
-            meals++;
+        List<EntityId> food = villager == null ? List.of()
+                : com.ewitulsk.villagersimulator.content.villages.Villages.services(ctx, villager.village(), "eat");
+        int first = food.isEmpty() ? 0 : (int) Math.floorMod(villager.seed(), (long) food.size());
+        for (int k = 0; k < food.size() && meals < 3; k++) {
+            EntityId place = food.get((first + k) % food.size());
+            int bread = Buildings.stock(ctx, place, Buildings.BREAD);
+            int eat = Math.min(3 - meals, bread);
+            if (eat <= 0) continue;
+            Buildings.setStock(ctx, place, Buildings.BREAD, bread - eat);
+            meals += eat;
         }
         Needs.coarseDay(ctx, v, meals);
         checkStarving(ctx, v);
         int index = plan.indexAt(ctx.now());
-        ctx.set(v, CURSOR_INDEX, index);
+        ctx.set(v, CURSOR_INDEX, -1);
         ctx.set(v, CURSOR_STARTED, ctx.now());
         setPosition(ctx, v, plan.entries().get(index).target());
         int seq = ctx.get(v, CURSOR_SEQ) + 1;

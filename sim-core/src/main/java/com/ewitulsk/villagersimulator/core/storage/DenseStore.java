@@ -6,8 +6,8 @@ import java.util.Arrays;
 import java.util.BitSet;
 
 /**
- * Structure-of-arrays storage for one dense component, indexed by entity index. Phase 0 has a single shard, so rows
- * are simply entity indices; sharding (Phase 5) changes this class, not the API.
+ * Structure-of-arrays storage for one dense component, indexed by entity index. Shards share the columns: each
+ * writes only its own entities' rows, and rows are reserved when entities are created (at a boundary).
  */
 public final class DenseStore {
     private final DenseComponent component;
@@ -88,7 +88,8 @@ public final class DenseStore {
 
     private void ensure(int index) {
         if (index < capacity) return;
-        int size = Math.max(index + 1, capacity * 2);
+        // 1.5x growth: at a million entities, doubling would leave up to half of every column unused.
+        int size = Math.max(index + 1, capacity + capacity / 2);
         for (int i = 0; i < floats.length; i++) floats[i] = Arrays.copyOf(floats[i], size);
         for (int i = 0; i < longs.length; i++) longs[i] = Arrays.copyOf(longs[i], size);
         for (int i = 0; i < ints.length; i++) ints[i] = Arrays.copyOf(ints[i], size);

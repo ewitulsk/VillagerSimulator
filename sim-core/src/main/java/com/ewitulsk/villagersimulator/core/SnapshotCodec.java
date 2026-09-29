@@ -28,12 +28,16 @@ import java.util.Map;
  * Binary world snapshot. Every component is its own length-prefixed section keyed by component id, with dense fields
  * matched by name, so adding/removing fields or components is a safe change. Sections no registered component
  * claims are kept and written back unchanged (docs/ARCHITECTURE.md §17).
+ *
+ * <p>Since format 3 the snapshot is deflate-compressed behind a {@code VSZ0} header (sparse components are JSON, which
+ * compresses about tenfold), and component sections are encoded in parallel (docs/ROADMAP.md Phase 6).
  */
 final class SnapshotCodec {
     private static final Logger LOG = LoggerFactory.getLogger("VillagerSim/Save");
     private static final int MAGIC = 0x56534D30; // "VSM0"
-    /** 2: per-shard queues and shard assignments. */
-    static final int FORMAT = 2;
+    private static final int MAGIC_COMPRESSED = 0x56535A30; // "VSZ0"
+    /** 2: per-shard queues and shard assignments. 3: compressed. */
+    static final int FORMAT = 3;
     private static final byte DENSE = 1;
     private static final byte SPARSE = 2;
     private static final byte GRAPH = 3;
@@ -45,8 +49,11 @@ final class SnapshotCodec {
 
     static byte[] write(SimWorld w) {
         try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            DataOutputStream out = new DataOutputStream(bytes);
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(1 << 20);
+            new DataOutputStream(bytes).writeInt(MAGIC_COMPRESSED);
+            java.util.zip.Deflater deflater = new java.util.zip.Deflater(java.util.zip.Deflater.BEST_SPEED);
+            DataOutputStream out = new DataOutputStream(new java.io.BufferedOutputStream(
+                    new java.util.zip.DeflaterOutputStream(bytes, deflater, 1 << 16), 1 << 16));
             out.writeInt(MAGIC);
             out.writeInt(FORMAT);
             out.writeLong(w.now());
@@ -70,8 +77,11 @@ final class SnapshotCodec {
             for (int i = 0; i < limit; i++) sb.writeInt(i < w.shardOf.length ? w.shardOf[i] : 0);
             sb.flush();
             sections.add(section(SHARD_SECTION, SHARDS, shardBytes.toByteArray()));
-            for (DenseStore s : w.dense.values()) sections.add(section(s.component().id(), DENSE, writeDense(s)));
-            for (SparseStore<?> s : w.sparse.values()) sections.add(section(s.component().id(), SPARSE, writeSparse(s)));
+            // Components are independent, so encode them in parallel (the world isn't running meanwhile).
+            sections.addAll(w.dense.values().parallelStream()
+                    .map(s -> unchecked(() -> section(s.component().id(), DENSE, writeDense(s)))).toList());
+            sections.addAll(w.sparse.values().parallelStream()
+                    .map(s -> unchecked(() -> section(s.component().id(), SPARSE, writeSparse(s)))).toList());
             ByteArrayOutputStream graph = new ByteArrayOutputStream();
             DataOutputStream g = new DataOutputStream(graph);
             w.relationships.write(g);
@@ -92,8 +102,21 @@ final class SnapshotCodec {
                 out.writeInt(t.target());
                 out.writeLong(t.arg());
             }
-            out.flush();
+            out.close();
+            deflater.end();
             return bytes.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private interface IoSupplier<T> {
+        T get() throws IOException;
+    }
+
+    private static <T> T unchecked(IoSupplier<T> s) {
+        try {
+            return s.get();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -102,7 +125,13 @@ final class SnapshotCodec {
     static void read(SimWorld w, byte[] data) {
         try {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
-            if (in.readInt() != MAGIC) throw new IllegalArgumentException("Not a Villager Simulator snapshot");
+            int magic = in.readInt();
+            if (magic == MAGIC_COMPRESSED) {
+                in = new DataInputStream(new java.io.BufferedInputStream(new java.util.zip.InflaterInputStream(
+                        new ByteArrayInputStream(data, 4, data.length - 4)), 1 << 16));
+                magic = in.readInt();
+            }
+            if (magic != MAGIC) throw new IllegalArgumentException("Not a Villager Simulator snapshot");
             int format = in.readInt();
             if (format > FORMAT) throw new IllegalArgumentException("Snapshot format " + format + " is newer than " + FORMAT);
             w.setNow(in.readLong());

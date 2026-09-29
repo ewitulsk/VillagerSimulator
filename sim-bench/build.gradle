@@ -1,0 +1,55 @@
+// Scale benchmark and JMH micro-benchmarks (docs/ROADMAP.md Phase 6). Not shipped.
+//
+//   ./gradlew :sim-bench:scale -Pvillages=5000 -Psize=200 -Pdays=3     1M villagers at T3
+//   ./gradlew :sim-bench:scale -Pvillages=250 -Psize=200 -Ptier=t2     50k villagers at T2
+//   ./gradlew :sim-bench:jmh [-Pjmh=Scheduler]                         micro-benchmarks
+sourceSets {
+    jmh {
+        java.srcDir 'src/jmh/java'
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+configurations {
+    jmhImplementation.extendsFrom implementation
+    jmhRuntimeOnly.extendsFrom runtimeOnly
+}
+
+dependencies {
+    implementation project(':sim-api')
+    implementation project(':sim-core')
+    implementation project(':sim-content')
+    implementation project(':sim-harness')
+    runtimeOnly "org.slf4j:slf4j-simple:${slf4jVersion}"
+    jmhImplementation 'org.openjdk.jmh:jmh-core:1.37'
+    jmhAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+}
+
+tasks.register('scale', JavaExec) {
+    group = 'benchmark'
+    description = 'Headless scale benchmark: N villages of S villagers, D sim-days; writes build/reports/scale/.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.ewitulsk.villagersimulator.bench.ScaleBenchmark'
+    maxHeapSize = providers.gradleProperty('heap').getOrElse('8g')
+    jvmArgs '-XX:+UseParallelGC'
+    // -Pjfr=true records a flight recording to build/reports/scale/scale.jfr
+    if (providers.gradleProperty('jfr').getOrElse('false') == 'true') {
+        jvmArgs "-XX:StartFlightRecording=filename=${layout.buildDirectory.file('reports/scale/scale.jfr').get().asFile},settings=profile"
+    }
+    def opts = ['villages', 'size', 'days', 'tier', 'threads', 'histo']
+    def values = opts.collectEntries { [(it): providers.gradleProperty(it).getOrNull()] }
+    def out = layout.buildDirectory.dir('reports/scale').get().asFile
+    args(values.findAll { it.value != null }.collect { "--${it.key}=${it.value}".toString() } + ["--out=${out}".toString()])
+}
+
+tasks.register('jmh', JavaExec) {
+    group = 'benchmark'
+    description = 'Runs the JMH micro-benchmarks (-Pjmh=<regex> to pick some).'
+    classpath = sourceSets.jmh.runtimeClasspath
+    mainClass = 'org.openjdk.jmh.Main'
+    def pick = providers.gradleProperty('jmh').getOrElse('.*')
+    def out = layout.buildDirectory.file('reports/jmh/results.txt').get().asFile
+    args pick, '-f', '1', '-wi', '2', '-i', '3', '-w', '1s', '-r', '1s', '-o', out.path
+    doFirst { out.parentFile.mkdirs() }
+}

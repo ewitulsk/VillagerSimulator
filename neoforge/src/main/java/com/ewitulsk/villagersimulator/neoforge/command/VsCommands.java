@@ -76,6 +76,14 @@ public final class VsCommands {
                     c.getSource().sendSuccess(() -> Component.literal("Debug overlay " + (on ? "on: chunk tiers (T0 green, T1 yellow, T2 orange, T3 red), districts, routes" : "off")), false);
                     return 1;
                 })))
+                .then(Commands.literal("profile").executes(VsCommands::profile)
+                        .then(Commands.literal("reset").executes(c -> {
+                            sim().runtime().submitWorld(com.ewitulsk.villagersimulator.core.SimWorld::resetProfile);
+                            c.getSource().sendSuccess(() -> Component.literal("Sim profile reset"), false);
+                            return 1;
+                        })))
+                .then(Commands.literal("stress").then(Commands.argument("villagers", IntegerArgumentType.integer(1, 2_000_000))
+                        .executes(c -> stress(c, IntegerArgumentType.getInteger(c, "villagers")))))
                 .then(Commands.literal("save").executes(VsCommands::save)));
     }
 
@@ -190,6 +198,55 @@ public final class VsCommands {
         net.minecraft.server.level.ServerPlayer player = c.getSource().getPlayerOrException();
         com.ewitulsk.villagersimulator.neoforge.server.SimPlayers.handle(sim, player).thenAccept(me ->
                 reply(c, sim.runtime().query(com.ewitulsk.villagersimulator.content.players.PlayerCommands.reputation(me))));
+        return 1;
+    }
+
+    /** Server tick time, villagers per tier, and where the sim spent its time since the last reset. */
+    private static int profile(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        SimServer sim = sim();
+        double mspt = sim.server().getAverageTickTimeNanos() / 1e6;
+        long lag = sim.runtime().targetTime() - sim.runtime().views().time();
+        return reply(c, sim.runtime().queryWorld(w -> {
+            List<String> out = new ArrayList<>();
+            out.add(String.format(java.util.Locale.ROOT, "Server %.1f ms/tick (%.1f TPS); sim %d ticks behind", mspt,
+                    Math.min(20, 1000 / Math.max(mspt, 1e-3)), lag));
+            int[] tiers = new int[Tier.values().length];
+            for (EntityId e : w.with(com.ewitulsk.villagersimulator.api.sim.core.CoreComponents.TIER)) {
+                tiers[com.ewitulsk.villagersimulator.api.sim.core.CoreComponents.tier(w, e).ordinal()]++;
+            }
+            out.add(String.format(java.util.Locale.ROOT, "Villagers T0 %,d  T1 %,d  T2 %,d  T3 %,d; %,d entities, %,d shards, %,d tasks, %,d events in memory",
+                    tiers[0], tiers[1], tiers[2], tiers[3], w.entityCount(), w.shardCount(), w.pendingTasks(), w.retainedEvents()));
+            out.addAll(w.profile().lines(12));
+            return out;
+        }));
+    }
+
+    /**
+     * Spawns {@code villagers} sim-only villagers (no blocks) in towns of up to 200, far enough away that they go to
+     * T3, to check that the server holds 20 TPS (docs/ROADMAP.md Phase 6).
+     */
+    private static int stress(CommandContext<CommandSourceStack> c, int villagers) throws CommandSyntaxException {
+        SimServer sim = sim();
+        CommandSourceStack source = c.getSource();
+        var types = sim.registry(BuildingType.REGISTRY);
+        BlockPos origin = BlockPos.containing(source.getPosition());
+        int size = 200;
+        int villages = (villagers + size - 1) / size;
+        int side = (int) Math.ceil(Math.sqrt(villages));
+        int baseX = origin.getX() + Math.max(4_000, 2 * com.ewitulsk.villagersimulator.neoforge.SimConfig.T3_RADIUS.get() + 1_000);
+        int baseZ = origin.getZ() - (side * 600) / 2;
+        long seed = source.getLevel().random.nextLong();
+        for (int i = 0; i < villages; i++) {
+            int n = Math.min(size, villagers - i * size);
+            int x = baseX + (i % side) * 600, z = baseZ + (i / side) * 600;
+            var layout = n > 16 ? VillageLayouts.town(types, x, 64, z, n)
+                    : new VillageLayouts.Layout(VillageLayouts.hamlet(types, x, 64, z, n), List.of());
+            boolean last = i == villages - 1;
+            sim.runtime().submit(new SpawnVillageCommand("Stress " + (i + 1), seed + i, x, 64, z, layout.placements(),
+                    layout.districts(), n, !last ? null : id -> sim.server().execute(() -> source.sendSuccess(() -> Component.literal(
+                            String.format(java.util.Locale.ROOT, "Spawned %,d stress villagers in %,d villages from x=%d. They exist only in the sim and "
+                                    + "go to T3 while players are far away; watch /vs profile.", villagers, villages, baseX)), true))));
+        }
         return 1;
     }
 

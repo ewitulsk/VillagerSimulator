@@ -15,4 +15,5 @@ include 'sim-api'       // PUBLIC: Minecraft-free contracts
 include 'sim-core'      // engine
 include 'sim-content'   // base game modules (sim-api only)
 include 'sim-harness'   // headless runner and scenarios
+include 'sim-bench'     // scale benchmark and JMH micro-benchmarks (docs/ROADMAP.md Phase 6)
 include 'neoforge'      // the mod

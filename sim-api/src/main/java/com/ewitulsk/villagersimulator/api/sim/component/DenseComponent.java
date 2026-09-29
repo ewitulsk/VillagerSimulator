@@ -18,6 +18,9 @@ import java.util.List;
  * Fields are matched by name when a save is loaded, so adding or removing fields is a safe schema change.
  */
 public final class DenseComponent {
+    private static final java.util.concurrent.atomic.AtomicInteger SERIALS = new java.util.concurrent.atomic.AtomicInteger();
+    private final int serial = SERIALS.getAndIncrement();
+
     private final Id id;
     private final int version;
     private final List<String> floatNames = new ArrayList<>();
@@ -83,5 +86,10 @@ public final class DenseComponent {
     @Override
     public String toString() {
         return "DenseComponent[" + id + "]";
+    }
+
+    /** A small number unique to this component object in the JVM; the engine indexes its stores by it. */
+    public int serial() {
+        return serial;
     }
 }

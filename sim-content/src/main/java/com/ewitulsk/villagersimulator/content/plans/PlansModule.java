@@ -57,7 +57,9 @@ public final class PlansModule implements SimModule {
         ctx.forEach(Plans.PLAN, (v, plan) -> {
             PlanEntry e = Plans.current(ctx, v);
             Villager id = ctx.get(v, Villages.VILLAGER);
-            if (e == null || id == null) return;
+            // Only detailed villages: far-away villagers never become puppets, and at a million villagers
+            // listing them all here every publish would dominate (docs/ROADMAP.md Phase 6).
+            if (e == null || id == null || !com.ewitulsk.villagersimulator.content.villages.VillageTiers.detailed(ctx, id)) return;
             double[] p = e.positionAt(now);
             Activity a = ctx.activity(e.activity());
             // Head for the next road waypoint; the rest of the route is for the debug overlay.

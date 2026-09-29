@@ -55,7 +55,17 @@ public final class SimTime {
      *
      * @throws IllegalArgumentException if the text isn't a duration
      */
+    private static final java.util.concurrent.ConcurrentHashMap<String, Long> DURATIONS = new java.util.concurrent.ConcurrentHashMap<>();
+
     public static long parseDuration(String text) {
+        Long cached = DURATIONS.get(text);
+        if (cached != null) return cached;
+        long ticks = parse(text);
+        if (DURATIONS.size() < 4096) DURATIONS.put(text, ticks);
+        return ticks;
+    }
+
+    private static long parse(String text) {
         String s = text.trim().toLowerCase();
         if (s.isEmpty()) throw new IllegalArgumentException("Empty duration");
         Matcher m = PART.matcher(s);

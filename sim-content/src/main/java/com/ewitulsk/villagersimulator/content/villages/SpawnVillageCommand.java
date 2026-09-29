@@ -139,6 +139,7 @@ public record SpawnVillageCommand(String name, long seed, int centerX, int cente
         }
 
         ctx.set(village, Villages.VILLAGE, new Village(name, seed, centerX, centerY, centerZ, ctx.now(), buildings, residents, districtIds));
+        VillageTiers.init(ctx, village);
         ctx.events().record(Villages.EVENT_FOUNDED, village, name);
         for (EntityId v : residents) {
             ctx.events().record(Villages.EVENT_ARRIVED, v, ctx.get(v, Villages.VILLAGER).name() + " arrived in " + name);

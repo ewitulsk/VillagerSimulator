@@ -24,6 +24,14 @@ public interface Relationships {
     /** Everyone {@code a} knows, strongest ties first. */
     List<Relation> of(EntityId a);
 
+    /**
+     * Everyone {@code a} knows, in storage order (deterministic, but not sorted). Cheaper than {@link #of} for hot
+     * paths that look at every tie.
+     */
+    default void forEach(EntityId a, java.util.function.Consumer<Relation> action) {
+        of(a).forEach(action);
+    }
+
     /** How many people {@code a} knows. */
     int count(EntityId a);
 }

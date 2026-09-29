@@ -40,8 +40,17 @@ public final class LogicImpl implements Logic {
     private final Map<String, Condition> conditions = new ConcurrentHashMap<>();
     private final Map<String, Effect> effects = new ConcurrentHashMap<>();
     private final ExpressionCompiler compiler = new ExpressionCompiler(functions);
+    // Identity caches in front of the string-keyed ones: definitions hand in the same String/JsonElement objects
+    // every time, so the hot path skips building the key (docs/ROADMAP.md Phase 6).
+    private final Map<ExprType, com.ewitulsk.villagersimulator.api.sim.util.IdentityCache<String, Expression>> expressionsById =
+            new java.util.EnumMap<>(ExprType.class);
+    private final com.ewitulsk.villagersimulator.api.sim.util.IdentityCache<JsonElement, Condition> conditionsById =
+            new com.ewitulsk.villagersimulator.api.sim.util.IdentityCache<>(4096);
+    private final com.ewitulsk.villagersimulator.api.sim.util.IdentityCache<JsonElement, Effect> effectsById =
+            new com.ewitulsk.villagersimulator.api.sim.util.IdentityCache<>(4096);
 
     public LogicImpl() {
+        for (ExprType t : ExprType.values()) expressionsById.put(t, new com.ewitulsk.villagersimulator.api.sim.util.IdentityCache<>(4096));
         registerBuiltins();
     }
 
@@ -58,6 +67,9 @@ public final class LogicImpl implements Logic {
     }
 
     public void clearCaches() {
+        expressionsById.values().forEach(com.ewitulsk.villagersimulator.api.sim.util.IdentityCache::clear);
+        conditionsById.clear();
+        effectsById.clear();
         expressions.clear();
         conditions.clear();
         effects.clear();
@@ -70,6 +82,10 @@ public final class LogicImpl implements Logic {
 
     @Override
     public Expression expression(String source, ExprType expected) {
+        return expressionsById.get(expected).get(source, s -> compileExpression(s, expected));
+    }
+
+    private Expression compileExpression(String source, ExprType expected) {
         String key = expected + "|" + source;
         Expression e = expressions.get(key);
         if (e == null) {
@@ -82,6 +98,10 @@ public final class LogicImpl implements Logic {
 
     @Override
     public Condition condition(JsonElement json) {
+        return conditionsById.get(json, this::compileCondition);
+    }
+
+    private Condition compileCondition(JsonElement json) {
         String key = json.toString();
         Condition c = conditions.get(key);
         if (c == null) {
@@ -94,6 +114,10 @@ public final class LogicImpl implements Logic {
 
     @Override
     public Effect effect(JsonElement json) {
+        return effectsById.get(json, this::compileEffect);
+    }
+
+    private Effect compileEffect(JsonElement json) {
         String key = json.toString();
         Effect e = effects.get(key);
         if (e == null) {

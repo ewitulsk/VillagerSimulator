@@ -228,6 +228,17 @@ public final class RelationshipGraph {
         }
 
         @Override
+        public void forEach(EntityId a, java.util.function.Consumer<Relation> action) {
+            int index = a.index();
+            if (index >= counts.length) return;
+            for (int i = 0; i < counts[index]; i++) {
+                long e = edges[index][i];
+                EntityId other = new EntityId(target(e));
+                if (alive.test(other)) action.accept(new Relation(other, current(e, touched[index][i]), bonds(e)));
+            }
+        }
+
+        @Override
         public int count(EntityId a) {
             return a.index() < counts.length ? counts[a.index()] : 0;
         }

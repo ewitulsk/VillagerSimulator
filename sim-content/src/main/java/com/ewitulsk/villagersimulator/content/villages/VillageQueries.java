@@ -50,6 +50,9 @@ public final class VillageQueries {
             out.add("Home: " + describe(ctx, v.home()) + "   Work: " + (v.employed() ? describe(ctx, v.workplace()) : "none"));
             Plan plan = ctx.get(villager, Plans.PLAN);
             PlanEntry now = Plans.current(ctx, villager);
+            if (plan == null && ctx.has(villager, Plans.CURSOR) && ctx.get(villager, Plans.CURSOR_COARSE) != 0) {
+                out.add("Now: far away, lived a day at a time (T3)");
+            }
             if (plan != null && now != null) {
                 int i = ctx.get(villager, Plans.CURSOR_INDEX);
                 out.add("Now: " + ctx.activity(now.activity()).label() + " until " + SimTime.describe(now.end()));
@@ -127,8 +130,8 @@ public final class VillageQueries {
                     Float.floatToIntBits(Needs.HUNGER.value(ctx, r)), Float.floatToIntBits(Needs.ENERGY.value(ctx, r)),
                     ctx.get(r, Needs.STARVING), ctx.get(r, Plans.CURSOR_INDEX), ctx.get(r, Plans.CURSOR_STARTED));
             Plan plan = ctx.get(r, Plans.PLAN);
-            h = SimRandom.hash(h, plan.day());
-            for (PlanEntry e : plan.entries()) {
+            h = SimRandom.hash(h, plan == null ? -1 : plan.day());
+            for (PlanEntry e : plan == null ? List.<PlanEntry>of() : plan.entries()) {
                 h = SimRandom.hash(h, e.start(), e.end(), SimRandom.salt(e.activity().toString()),
                         Double.doubleToLongBits(e.tx()), Double.doubleToLongBits(e.tz()));
             }

@@ -20,19 +20,103 @@ import java.util.List;
  * travel along it, so travel times and plan positions follow the roads.
  */
 public final class Roads {
-    /** Nodes as flattened {@code x, y, z}; edges as flattened node index pairs. */
-    public record Graph(List<Double> nodes, List<Integer> edges) {
+    /**
+     * Nodes as flattened {@code x, y, z}; edges as flattened node index pairs. Primitive arrays plus a prebuilt
+     * adjacency list, since routes are computed on every walk (docs/ROADMAP.md Phase 6).
+     */
+    public static final class Graph {
         public static final Codec<Graph> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.DOUBLE.listOf().fieldOf("nodes").forGetter(Graph::nodes),
                 Codec.INT.listOf().fieldOf("edges").forGetter(Graph::edges)
-        ).apply(i, Graph::new));
+        ).apply(i, (n, e) -> new Graph(n.stream().mapToDouble(Double::doubleValue).toArray(), e.stream().mapToInt(Integer::intValue).toArray())));
+
+        private final double[] xyz;
+        private final int[] edges;
+        private final int[][] adjacent;
+        /** Shortest-path trees (predecessor per node) by start node, computed on first use. */
+        private final java.util.concurrent.atomic.AtomicReferenceArray<int[]> trees;
+
+        public Graph(double[] xyz, int[] edges) {
+            this.xyz = xyz;
+            this.edges = edges;
+            int n = xyz.length / 3;
+            int[] degree = new int[n];
+            for (int i = 0; i + 1 < edges.length; i += 2) {
+                degree[edges[i]]++;
+                degree[edges[i + 1]]++;
+            }
+            trees = new java.util.concurrent.atomic.AtomicReferenceArray<>(n);
+            adjacent = new int[n][];
+            for (int i = 0; i < n; i++) adjacent[i] = new int[degree[i]];
+            int[] fill = new int[n];
+            for (int i = 0; i + 1 < edges.length; i += 2) {
+                adjacent[edges[i]][fill[edges[i]]++] = edges[i + 1];
+                adjacent[edges[i + 1]][fill[edges[i + 1]]++] = edges[i];
+            }
+        }
+
+        public List<Double> nodes() {
+            return Arrays.stream(xyz).boxed().toList();
+        }
+
+        public List<Integer> edges() {
+            return Arrays.stream(edges).boxed().toList();
+        }
 
         public int size() {
-            return nodes.size() / 3;
+            return xyz.length / 3;
         }
 
         double[] node(int i) {
-            return new double[]{nodes.get(3 * i), nodes.get(3 * i + 1), nodes.get(3 * i + 2)};
+            return new double[]{xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2]};
+        }
+
+        /** Predecessors on shortest paths from {@code start} (Dijkstra; graphs are small, one node per building). */
+        int[] tree(int start) {
+            int[] prev = trees.get(start);
+            if (prev != null) return prev;
+            int n = size();
+            double[] d = new double[n];
+            prev = new int[n];
+            boolean[] done = new boolean[n];
+            Arrays.fill(d, Double.MAX_VALUE);
+            Arrays.fill(prev, -1);
+            d[start] = 0;
+            for (int k = 0; k < n; k++) {
+                int u = -1;
+                for (int i = 0; i < n; i++) if (!done[i] && d[i] < Double.MAX_VALUE && (u < 0 || d[i] < d[u])) u = i;
+                if (u < 0) break;
+                done[u] = true;
+                for (int v : adjacent[u]) {
+                    double nd = d[u] + dist(u, v);
+                    if (nd < d[v]) {
+                        d[v] = nd;
+                        prev[v] = u;
+                    }
+                }
+            }
+            trees.compareAndSet(start, null, prev);
+            return trees.get(start);
+        }
+
+        double dist(int a, int b) {
+            double dx = xyz[3 * a] - xyz[3 * b], dy = xyz[3 * a + 1] - xyz[3 * b + 1], dz = xyz[3 * a + 2] - xyz[3 * b + 2];
+            return Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+
+        double dist(int a, double[] p) {
+            double dx = xyz[3 * a] - p[0], dy = xyz[3 * a + 1] - p[1], dz = xyz[3 * a + 2] - p[2];
+            return Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Graph g && Arrays.equals(xyz, g.xyz) && Arrays.equals(edges, g.edges);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Arrays.hashCode(xyz) + Arrays.hashCode(edges);
         }
     }
 
@@ -88,9 +172,9 @@ public final class Roads {
                 }
             }
         }
-        List<Double> flat = new ArrayList<>();
-        for (double[] p : points) for (double c : p) flat.add(c);
-        return new Graph(flat, edges);
+        double[] flat = new double[n * 3];
+        for (int i = 0; i < n; i++) System.arraycopy(points.get(i), 0, flat, 3 * i, 3);
+        return new Graph(flat, edges.stream().mapToInt(Integer::intValue).toArray());
     }
 
     /** Where a building meets the road: its first wander point (outside the door), or the front of its footprint. */
@@ -109,32 +193,7 @@ public final class Roads {
         if (g == null || g.size() < 2 || dist(a, b) < DIRECT) return List.of();
         int start = nearest(g, a), goal = nearest(g, b);
         if (start == goal) return List.of();
-        List<List<Integer>> adj = new ArrayList<>();
-        for (int i = 0; i < g.size(); i++) adj.add(new ArrayList<>());
-        for (int i = 0; i + 1 < g.edges().size(); i += 2) {
-            adj.get(g.edges().get(i)).add(g.edges().get(i + 1));
-            adj.get(g.edges().get(i + 1)).add(g.edges().get(i));
-        }
-        // Dijkstra (graphs are small: one node per building).
-        double[] d = new double[g.size()];
-        int[] prev = new int[g.size()];
-        boolean[] done = new boolean[g.size()];
-        Arrays.fill(d, Double.MAX_VALUE);
-        Arrays.fill(prev, -1);
-        d[start] = 0;
-        for (int k = 0; k < g.size(); k++) {
-            int u = -1;
-            for (int i = 0; i < g.size(); i++) if (!done[i] && d[i] < Double.MAX_VALUE && (u < 0 || d[i] < d[u])) u = i;
-            if (u < 0 || u == goal) break;
-            done[u] = true;
-            for (int v : adj.get(u)) {
-                double nd = d[u] + dist(g.node(u), g.node(v));
-                if (nd < d[v]) {
-                    d[v] = nd;
-                    prev[v] = u;
-                }
-            }
-        }
+        int[] prev = g.tree(start);
         if (prev[goal] < 0) return List.of();
         List<double[]> path = new ArrayList<>();
         for (int v = goal; v >= 0; v = prev[v]) path.add(0, g.node(v));
@@ -147,7 +206,14 @@ public final class Roads {
 
     private static int nearest(Graph g, double[] p) {
         int best = 0;
-        for (int i = 1; i < g.size(); i++) if (dist(g.node(i), p) < dist(g.node(best), p)) best = i;
+        double bestD = g.dist(0, p);
+        for (int i = 1; i < g.size(); i++) {
+            double d = g.dist(i, p);
+            if (d < bestD) {
+                bestD = d;
+                best = i;
+            }
+        }
         return best;
     }
 

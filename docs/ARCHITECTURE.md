@@ -73,6 +73,7 @@ Tags: **[DECIDED]** the user explicitly chose it · **[PROPOSED]** a recommendat
 | A23 | API artifact hosting: **none for now**; addons build against locally published artifacts | DECIDED |
 | A24 | Expression language: **custom grammar** (Molang-style syntax), not an existing Molang library | DECIDED (delegated) |
 | A25 | **Optional vanilla integrations** as separate switchable modules, in the priority order of [§13.5](#135-optional-vanilla-integrations) | DECIDED |
+| A26 | **Tiers per village first** (detailed / abstract / coarse), then per villager inside detailed villages; T3 villagers keep no plan; saved event records leave memory after a retention ([SCALE.md](SCALE.md)) | DECIDED (Phase 6) |
 
 ---
 
@@ -606,6 +607,7 @@ Firm and household stock is **one dataset with two views**: a ledger in the sim,
 - **Unknown components** (e.g. from a removed addon) are preserved as opaque blobs.
 - **Event log reads** (chronicle, inspector) run on a separate read connection, which WAL mode allows alongside writes.
 - **Storage stays behind an interface** so the harness can use an in-memory SQLite database.
+- **As built (Phase 6):** the snapshot is one deflate-compressed blob (format 3, about 100 MB at 1M villagers), and its component sections are encoded in parallel. Event records are saved by position. Once saved and older than the retention (3 sim-days by default), they leave memory, and loading reads only the recent ones.
 
 ---
 
@@ -618,7 +620,7 @@ Built from day one.
   - `village spawn <culture>`
   - `expr eval <expression>` against a chosen context
   - `scenario run <name>`
-  - `profile` (time per system and per KubeJS handler), `dump`
+  - `profile` (time per system and per KubeJS handler), `dump`. Built in Phase 6: `profile [reset]` (server tick time, villagers per tier, time per task type and view) and `stress <n>` (sim-only villages far away)
 - **Debug overlay:** chunk colours by tier, district borders, a villager's plan route and current Activity, appointment links, reconciliation queue.
 - **Inspector screen:** click any villager to browse full sim state.
 

@@ -27,7 +27,8 @@ import java.util.Optional;
  * half-written save. Not thread-safe: use from one thread (the save thread).
  */
 public final class SqliteSimStore implements AutoCloseable {
-    public record Loaded(long time, byte[] data, List<EventRecord> events) {}
+    /** @param forgotten saved event records older than the retention, left in the database */
+    public record Loaded(long time, byte[] data, List<EventRecord> events, int forgotten) {}
 
     private final Connection connection;
     private volatile int savedEvents;
@@ -114,6 +115,11 @@ public final class SqliteSimStore implements AutoCloseable {
     }
 
     public Optional<Loaded> load() {
+        return load(Long.MAX_VALUE);
+    }
+
+    /** Loads the snapshot and the event records from the last {@code retention} ticks before it. */
+    public Optional<Loaded> load(long retention) {
         try {
             byte[] data;
             long time;
@@ -124,15 +130,27 @@ public final class SqliteSimStore implements AutoCloseable {
                 data = r.getBytes(2);
             }
             List<EventRecord> events = new ArrayList<>();
-            try (Statement s = connection.createStatement();
-                 ResultSet r = s.executeQuery("SELECT id, time, type, actor, cause, witnesses, detail FROM event_log ORDER BY seq, id")) {
-                while (r.next()) {
-                    events.add(new EventRecord(r.getLong(1), r.getLong(2), Id.parse(r.getString(3)),
-                            new EntityId(r.getInt(4)), r.getLong(5), parseWitnesses(r.getString(6)), r.getString(7)));
+            long cutoff = retention == Long.MAX_VALUE ? Long.MIN_VALUE : time - retention;
+            int forgotten;
+            try (PreparedStatement p = connection.prepareStatement("SELECT COUNT(*) FROM event_log WHERE time < ?")) {
+                p.setLong(1, cutoff);
+                try (ResultSet r = p.executeQuery()) {
+                    forgotten = r.next() ? r.getInt(1) : 0;
+                }
+            }
+            // Times never decrease along the log, so the old records are exactly the first `forgotten`.
+            try (PreparedStatement p = connection.prepareStatement(
+                    "SELECT id, time, type, actor, cause, witnesses, detail FROM event_log ORDER BY seq, id LIMIT -1 OFFSET ?")) {
+                p.setInt(1, forgotten);
+                try (ResultSet r = p.executeQuery()) {
+                    while (r.next()) {
+                        events.add(new EventRecord(r.getLong(1), r.getLong(2), Id.parse(r.getString(3)),
+                                new EntityId(r.getInt(4)), r.getLong(5), parseWitnesses(r.getString(6)), r.getString(7)));
+                    }
                 }
             }
             connection.commit();
-            return Optional.of(new Loaded(time, data, events));
+            return Optional.of(new Loaded(time, data, events, forgotten));
         } catch (SQLException e) {
             throw new IllegalStateException("Loading the sim failed", e);
         }

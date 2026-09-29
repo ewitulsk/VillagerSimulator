@@ -82,9 +82,9 @@ public final class PlayersModule implements SimModule {
 
     private static Map<EntityId, Float> playerOpinions(SimContext ctx, EntityId v) {
         Map<EntityId, Float> out = new LinkedHashMap<>();
-        for (Relation r : ctx.relationships().of(v)) {
-            if (Players.isPlayer(ctx, r.other()) && Math.abs(r.friendship()) >= 1) out.put(r.other(), r.friendship());
-        }
+        ctx.relationships().forEach(v, r -> {
+            if (Math.abs(r.friendship()) >= 1 && Players.isPlayer(ctx, r.other())) out.put(r.other(), r.friendship());
+        });
         return out;
     }
 
@@ -113,6 +113,13 @@ public final class PlayersModule implements SimModule {
             }
         }
         com.ewitulsk.villagersimulator.api.sim.core.CoreComponents.setPinned(ctx, villager, pinned);
+        // No longer pinned in a far-away village: rejoin it at T3.
+        Villager record = ctx.get(villager, Villages.VILLAGER);
+        if (!pinned && record != null && com.ewitulsk.villagersimulator.content.villages.VillageTiers.coarse(ctx, record.village())
+                && !com.ewitulsk.villagersimulator.api.sim.core.CoreComponents.forced(ctx, villager)) {
+            com.ewitulsk.villagersimulator.api.sim.core.CoreComponents.setTier(ctx, villager,
+                    com.ewitulsk.villagersimulator.api.sim.core.Tier.T3);
+        }
     }
 
     /** A player gives a villager an item. Calls back with the villager's reaction. */
