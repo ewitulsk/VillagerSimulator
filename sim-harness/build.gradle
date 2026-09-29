@@ -1,0 +1,6 @@
+// Headless runner and scenario DSL (docs/ARCHITECTURE.md §19). Scenario tests run in virtual time.
+dependencies {
+    api project(':sim-api')
+    api project(':sim-core')
+    api project(':sim-content')
+}

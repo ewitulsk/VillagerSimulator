@@ -1,0 +1,6 @@
+// The engine (docs/ARCHITECTURE.md §5-§7, §17). Minecraft-free.
+dependencies {
+    api project(':sim-api')
+    implementation "it.unimi.dsi:fastutil:${fastutilVersion}"
+    implementation "org.xerial:sqlite-jdbc:${sqliteVersion}"
+}

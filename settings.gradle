@@ -7,3 +7,12 @@ pluginManagement {
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
+
+rootProject.name = 'VillagerSimulator'
+
+// See docs/ARCHITECTURE.md §4 for the layout and dependency rules.
+include 'sim-api'       // PUBLIC: Minecraft-free contracts
+include 'sim-core'      // engine
+include 'sim-content'   // base game modules (sim-api only)
+include 'sim-harness'   // headless runner and scenarios
+include 'neoforge'      // the mod

@@ -1,0 +1,159 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.147'
+    id 'idea'
+}
+
+// The simulation projects are part of this mod: their classes and data are packed into the mod jar,
+// and in dev they are registered as source sets of the same mod.
+def simProjects = [':sim-api', ':sim-core', ':sim-content']
+simProjects.each { evaluationDependsOn(it) }
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+def prop = { String name -> providers.gradleProperty(name) }
+
+// GameTest namespaces. NeoForge 1.21.1 selects GameTests by namespace (see ../ModTesting.md), so each area gets
+// one. Every namespace needs an `empty` template, generated below.
+def testNamespaces = ['villagersimulator_bridge', 'villagersimulator_time']
+
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = file(prop('vsClientRunDir').getOrElse('runs/client'))
+        }
+        server {
+            server()
+            gameDirectory = file(prop('vsServerRunDir').getOrElse('runs/server'))
+            programArgument '--nogui'
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = file(prop('vsTestRunDir').getOrElse('runs/gametest'))
+            systemProperty 'neoforge.enabledGameTestNamespaces', prop('vsGameTestNamespaces').getOrElse(testNamespaces.join(','))
+            programArgument '--nogui'
+        }
+        configureEach {
+            logLevel = org.slf4j.event.Level.INFO
+            // Dev hot-swap (docs/ROADMAP.md Phase 0, time control): run with -Pvs_hotswap=true on a JetBrains Runtime
+            // to redefine classes (new methods/fields) without restarting the game.
+            if (prop('vs_hotswap').getOrElse('false') == 'true') {
+                jvmArgument '-XX:+AllowEnhancedClassRedefinition'
+            }
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+            simProjects.each { sourceSet(project(it).sourceSets.main) }
+        }
+    }
+}
+
+// With -Pvs_hotswap=true the game runs on a JetBrains Runtime (auto-provisioned by the toolchain resolver).
+if (prop('vs_hotswap').getOrElse('false') == 'true') {
+    tasks.withType(JavaExec).configureEach {
+        javaLauncher = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(21)
+            vendor = JvmVendorSpec.JETBRAINS
+        }
+    }
+}
+
+dependencies {
+    simProjects.each { implementation project(it) }
+    // SQLite is not shipped by Minecraft, so it is jar-in-jar'd (docs/ARCHITECTURE.md §17).
+    jarJar(implementation("org.xerial:sqlite-jdbc")) {
+        version {
+            strictly "[${sqliteVersion},4)"
+            prefer sqliteVersion
+        }
+    }
+    // Non-mod libraries must also be on the game's classpath in dev runs.
+    additionalRuntimeClasspath "org.xerial:sqlite-jdbc:${sqliteVersion}"
+}
+
+tasks.named('jar', Jar) {
+    // Pack the simulation projects into the mod jar.
+    simProjects.each { p ->
+        from(project(p).sourceSets.main.output)
+    }
+    // Test-only structure templates are generated into build/ and are not shipped.
+    testNamespaces.each { ns -> exclude "data/${ns}/structure/**" }
+}
+
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+// A 16x8x16 GameTest arena per namespace with a stone floor, written as standard compressed structure NBT
+// (no checked-in .nbt).
+def testTemplates = layout.buildDirectory.dir('generated/testTemplates')
+tasks.register('generateTestTemplates') {
+    def namespaces = testNamespaces
+    inputs.property 'namespaces', namespaces
+    outputs.dir(testTemplates)
+    def out = testTemplates
+    doLast {
+        namespaces.each { ns ->
+            def target = out.get().file("data/${ns}/structure/empty.nbt").asFile
+            target.parentFile.mkdirs()
+            new DataOutputStream(new java.util.zip.GZIPOutputStream(new FileOutputStream(target))).withCloseable { o ->
+                o.writeByte(10); o.writeUTF('')
+                o.writeByte(3); o.writeUTF('DataVersion'); o.writeInt(3955)
+                o.writeByte(9); o.writeUTF('size'); o.writeByte(3); o.writeInt(3)
+                [16, 8, 16].each { o.writeInt(it) }
+                o.writeByte(9); o.writeUTF('palette'); o.writeByte(10); o.writeInt(1)
+                o.writeByte(8); o.writeUTF('Name'); o.writeUTF('minecraft:stone'); o.writeByte(0)
+                o.writeByte(9); o.writeUTF('blocks'); o.writeByte(10); o.writeInt(16 * 16)
+                for (int x = 0; x < 16; x++) {
+                    for (int z = 0; z < 16; z++) {
+                        o.writeByte(9); o.writeUTF('pos'); o.writeByte(3); o.writeInt(3)
+                        o.writeInt(x); o.writeInt(0); o.writeInt(z)
+                        o.writeByte(3); o.writeUTF('state'); o.writeInt(0)
+                        o.writeByte(0)
+                    }
+                }
+                o.writeByte(9); o.writeUTF('entities'); o.writeByte(10); o.writeInt(0)
+                o.writeByte(0)
+            }
+        }
+    }
+}
+sourceSets.main.resources.srcDir(testTemplates)
+tasks.named('processResources') { dependsOn 'generateTestTemplates' }
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}

@@ -1,0 +1,6 @@
+// PUBLIC, Minecraft-free contracts (docs/ARCHITECTURE.md §11). Everything here is provided by Minecraft at runtime.
+dependencies {
+    api "com.mojang:datafixerupper:${dfuVersion}"
+    api "com.google.code.gson:gson:${gsonVersion}"
+    api "org.slf4j:slf4j-api:${slf4jVersion}"
+}

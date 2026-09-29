@@ -1,25 +1,65 @@
+# Villager Simulator
 
-Installation information
-=======
+A NeoForge 1.21.1 mod: a village simulation engine aiming at a million villagers, with daily lives that keep going when you walk away.
 
-This template repository can be directly cloned to get you started with a new
-mod. Simply create a new repository cloned from this one, by following the
-instructions provided by [GitHub](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
+- [docs/DESIGN.md](docs/DESIGN.md): what the game is
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it's built
+- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Phase 0 (A Living Hamlet) is implemented.**
 
-Once you have your clone, simply open the repository in the IDE of your choice. The usual recommendation for an IDE is either IntelliJ IDEA or Eclipse.
+## Project layout
 
-If at any point you are missing libraries in your IDE, or you've run into problems you can
-run `gradlew --refresh-dependencies` to refresh the local cache. `gradlew clean` to reset everything 
-{this does not affect your code} and then start the process again.
+| Project | What it is |
+|---|---|
+| `sim-api` | Public, Minecraft-free contracts: entities, components, tasks, events, registries, activities, views, modules |
+| `sim-core` | The engine: storage, event scheduler, runtime thread, SQLite persistence |
+| `sim-content` | Base game modules (needs, buildings, villages, plans), built only on `sim-api` |
+| `sim-harness` | Headless scenario DSL; scenario tests run in virtual time |
+| `neoforge` | The mod: bridge, villager puppets, blueprints, `/vs` commands, GameTests |
+| `tools/blueprints` | Structure Lab scripts that generate the blueprints and their building-type JSON |
 
-Mapping Names:
-============
-By default, the MDK is configured to use the official mapping names from Mojang for methods and fields 
-in the Minecraft codebase. These names are covered by a specific license. All modders should be aware of this
-license. For the latest license text, refer to the mapping file itself, or the reference copy here:
-https://github.com/NeoForged/NeoForm/blob/main/Mojang.md
+## Build and test
 
-Additional Resources: 
-==========
-Community Documentation: https://docs.neoforged.net/  
-NeoForged Discord: https://discord.neoforged.net/
+```bash
+./gradlew build
+```
+
+Runs the unit and scenario tests (headless, seconds) and builds `neoforge/build/libs/villagersimulator-<version>.jar`.
+
+```bash
+./gradlew :neoforge:runGameTestServer
+```
+
+Runs the GameTests. Pick namespaces with `-PvsGameTestNamespaces=villagersimulator_bridge` (or `villagersimulator_time`).
+
+```bash
+./gradlew checkDependencyRules
+```
+
+Checks the project dependency rules from ARCHITECTURE §4.
+
+Regenerate blueprints after editing `tools/blueprints/phase0.py`:
+
+```bash
+D:/MinecraftMods/MinecraftStructureInjector/.venv/Scripts/python.exe tools/blueprints/phase0.py
+```
+
+## Play Phase 0
+
+```bash
+./gradlew :neoforge:runClient
+```
+
+In a creative overworld (cheats on):
+
+- `/vs village spawn [villagers] [name]` founds a hamlet around you: a well, a bakery and houses, with 8 villagers by default. They sleep, eat at the bakery, bake, and relax at the well on a daily schedule.
+- `/vs inspect [villager]` shows the nearest villager's needs, plan and recent events. Right-clicking a building's anchor block shows the building and its stock.
+- `/vs village list` lists villages.
+- `/vs time warp <1d|6h|30m|200t>` runs the sim ahead; `/vs time status` shows the clock.
+- `/vs tier force all <t0|t2|auto>` forces tiers, for debugging.
+- `/vs save` saves the sim now; it also saves with the world.
+
+Walk more than 48 blocks away and the villagers become abstract (T2) while their days carry on. Come back and they're where their schedule says. The sim is saved in `<world>/villagersimulator/sim.db`.
+
+**Config** (`config/villagersimulator-common.toml`): `sim.debugTimeScale` speeds up sim time for playtesting; `tiers.t0Radius` sets the embodiment distance.
+
+**Hot-swap in dev:** `./gradlew :neoforge:runClient -Pvs_hotswap=true` runs on a JetBrains Runtime with enhanced class redefinition.

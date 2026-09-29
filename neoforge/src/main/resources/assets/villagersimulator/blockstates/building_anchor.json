@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "villagersimulator:block/building_anchor" }
+  }
+}

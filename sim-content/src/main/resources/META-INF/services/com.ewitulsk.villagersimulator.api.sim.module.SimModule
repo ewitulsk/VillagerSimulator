@@ -1,0 +1,4 @@
+com.ewitulsk.villagersimulator.content.needs.NeedsModule
+com.ewitulsk.villagersimulator.content.buildings.BuildingsModule
+com.ewitulsk.villagersimulator.content.villages.VillagesModule
+com.ewitulsk.villagersimulator.content.plans.PlansModule

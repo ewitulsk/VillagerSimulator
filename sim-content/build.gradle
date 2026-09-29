@@ -1,0 +1,5 @@
+// Base game modules. Main code may only use sim-api (docs/ARCHITECTURE.md §3, "dogfood the API").
+dependencies {
+    implementation project(':sim-api')
+    testImplementation project(':sim-core')
+}

@@ -1,0 +1,49 @@
+{
+  "blueprint": "villagersimulator:house",
+  "size": [
+    9,
+    6,
+    7
+  ],
+  "points": {
+    "bed": [
+      [
+        1,
+        1,
+        1
+      ],
+      [
+        3,
+        1,
+        1
+      ],
+      [
+        5,
+        1,
+        1
+      ],
+      [
+        7,
+        1,
+        1
+      ]
+    ],
+    "wander": [
+      [
+        4,
+        1,
+        7
+      ]
+    ],
+    "anchor": [
+      [
+        1,
+        0,
+        5
+      ]
+    ]
+  },
+  "services": [
+    "home"
+  ]
+}
