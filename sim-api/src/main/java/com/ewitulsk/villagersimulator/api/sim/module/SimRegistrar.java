@@ -46,4 +46,7 @@ public interface SimRegistrar {
      * compiles. Problems are reported to the log and to {@code /vs} instead of crashing the server.
      */
     void validator(Validator validator);
+
+    /** Plugs {@code value} into another module's extension point. */
+    <T> void extend(ExtensionPoint<T> point, T value);
 }

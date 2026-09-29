@@ -37,7 +37,9 @@ public final class DataGameTests {
      * A building type that only exists in reloaded data (as a datapack would add it) is used by villagers: the data
      * reaches the running sim and the utility AI picks its advertisement up with no code changes.
      */
-    @GameTest(template = "empty", batch = BATCH, timeoutTicks = 200)
+    // The sim warps on its own thread in real time while the GameTest server runs ticks unthrottled, so waits are
+    // generous in ticks (still well under the 1200-tick ceiling in ../ModTesting.md).
+    @GameTest(template = "empty", batch = BATCH, timeoutTicks = 1200)
     public static void reloadedBuildingTypeIsUsed(GameTestHelper h) {
         DataSource original = sim().data();
         JsonElement fountain = JsonParser.parseString("""
@@ -59,15 +61,16 @@ public final class DataGameTests {
         placements.add(new SpawnVillageCommand.Placement(Id.of("testpack", "fountain"), f.getX(), f.getY(), f.getZ()));
         AtomicReference<EntityId> village = new AtomicReference<>();
         AtomicReference<Integer> visits = new AtomicReference<>();
+        java.util.concurrent.atomic.AtomicLong spawnedAt = new java.util.concurrent.atomic.AtomicLong(-1);
         TestSupport.spawn(new SpawnVillageCommand(base.name(), base.seed(), base.centerX(), base.centerY(), base.centerZ(),
-                placements, base.villagers(), null), null).thenAccept(id -> {
+                placements, base.villagers(), null), spawnedAt).thenAccept(id -> {
             village.set(id);
             sim().runtime().advanceTarget(SimTime.days(1));
         });
 
         h.startSequence()
                 .thenWaitUntil(() -> require(village.get() != null, "village spawned"))
-                .thenWaitUntil(() -> require(!sim().runtime().catchingUp(), "warped"))
+                .thenWaitUntil(() -> require(sim().runtime().views().time() >= spawnedAt.get() + SimTime.days(1), "warped a day"))
                 .thenExecute(() -> sim().runtime().query(ctx -> {
                     var buildings = ctx.get(village.get(), Villages.VILLAGE).buildings();
                     return Buildings.visits(ctx, buildings.get(buildings.size() - 1));

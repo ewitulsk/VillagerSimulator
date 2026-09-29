@@ -5,6 +5,7 @@ import com.ewitulsk.villagersimulator.api.sim.core.Embodiment;
 import com.ewitulsk.villagersimulator.api.sim.core.SetTiersCommand;
 import com.ewitulsk.villagersimulator.api.sim.core.Tier;
 import com.ewitulsk.villagersimulator.api.sim.view.SimViews;
+import com.ewitulsk.villagersimulator.content.social.Social;
 import com.ewitulsk.villagersimulator.core.SimRuntime;
 import com.ewitulsk.villagersimulator.neoforge.ModContent;
 import com.ewitulsk.villagersimulator.neoforge.SimConfig;
@@ -39,6 +40,7 @@ public final class SimBridge {
     private long tickCount;
     private SimViews viewsSeen;
     private Map<Integer, Embodiment> embodiments = Map.of();
+    private Map<Integer, Integer> partners = Map.of();
 
     SimBridge(MinecraftServer server, SimRuntime runtime) {
         this.server = server;
@@ -85,6 +87,10 @@ public final class SimBridge {
         Map<Integer, Embodiment> map = new LinkedHashMap<>();
         if (list != null) for (Embodiment e : list) map.put(e.id().raw(), e);
         embodiments = map;
+        Map<EntityId, EntityId> talks = views.get(Social.CONVERSATIONS);
+        Map<Integer, Integer> p = new HashMap<>();
+        if (talks != null) talks.forEach((a, b) -> p.put(a.raw(), b.raw()));
+        partners = p;
     }
 
     /** The latest embodiment for a sim entity, or {@code null} if the sim no longer has it. */
@@ -143,6 +149,12 @@ public final class SimBridge {
             SimVillagerEntity v = (SimVillagerEntity) entity;
             if (puppets.get(v.handle()) != v) v.discard();
         }
+    }
+
+    /** The embodiment of whoever {@code handle} is talking to, or {@code null}. */
+    public Embodiment partnerOf(int handle) {
+        Integer other = partners.get(handle);
+        return other == null ? null : embodiments.get(other);
     }
 
     /** True if {@code entity} is the puppet the bridge currently tracks for its handle. */

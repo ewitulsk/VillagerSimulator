@@ -47,7 +47,7 @@ public final class Choices {
         double score(Candidate c);
     }
 
-    /** Need gains, weighted by how badly each need is felt: a starving villager values food far above fun. */
+    /** Need gains, weighted steeply by how badly each need is felt: a starving villager values food far above fun. */
     public static final Consideration NEEDS = c -> {
         double total = 0;
         for (Map.Entry<String, Double> gain : c.ad().needs().entrySet()) {
@@ -56,9 +56,24 @@ public final class Choices {
             double deficit = Need.MAX - t.need().value(c.sim(), c.actor());
             double urgency = deficit / Need.MAX;
             double useful = gain.getValue() > 0 ? Math.min(gain.getValue(), deficit) : gain.getValue();
-            total += useful * (1 + 4 * urgency * urgency);
+            total += useful * (1 + 12 * urgency * urgency * urgency) * t.priority();
         }
         return total;
+    };
+
+    /** A need at or below this is critical. */
+    public static final float CRITICAL = 25;
+    /** An option has to restore at least this much of a critical need to count as helping. */
+    public static final double REAL_HELP = 20;
+
+    /** While a need is critical, anything that doesn't really help it is nearly out of the question. */
+    public static final Consideration URGENT = c -> {
+        double penalty = 0;
+        for (Needs.NeedType t : Needs.ALL) {
+            if (t.need().value(c.sim(), c.actor()) > CRITICAL) continue;
+            if (c.ad().needs().getOrDefault(t.name(), 0.0) < REAL_HELP) penalty -= 150;
+        }
+        return penalty;
     };
 
     public static final Consideration DISTANCE = c -> -DISTANCE_COST * distance(c.from(), c.point());
@@ -72,7 +87,7 @@ public final class Choices {
             SimRandom.salt(c.ad().id()), c.building().x(), c.building().y(), c.building().z());
 
     /** The base game's considerations. */
-    public static final List<Consideration> CONSIDERATIONS = List.of(NEEDS, DISTANCE, AD_SCORE, VARIETY_BONUS);
+    public static final List<Consideration> CONSIDERATIONS = List.of(NEEDS, URGENT, DISTANCE, AD_SCORE, VARIETY_BONUS);
 
     private Choices() {}
 
@@ -112,6 +127,7 @@ public final class Choices {
         Candidate c = new Candidate(ctx, actor, villager, venue, building, ad, from, point, env);
         double total = 0;
         for (Consideration k : CONSIDERATIONS) total += k.score(c);
+        for (Consideration k : ctx.extensions(PlanHooks.CONSIDERATIONS)) total += k.score(c);
         return new Option(venue, ad, point, total);
     }
 

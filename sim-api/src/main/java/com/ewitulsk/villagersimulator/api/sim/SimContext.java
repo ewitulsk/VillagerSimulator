@@ -9,6 +9,8 @@ import com.ewitulsk.villagersimulator.api.sim.component.SparseComponent;
 import com.ewitulsk.villagersimulator.api.sim.event.EventLog;
 import com.ewitulsk.villagersimulator.api.sim.event.SimEvent;
 import com.ewitulsk.villagersimulator.api.sim.logic.Logic;
+import com.ewitulsk.villagersimulator.api.sim.module.ExtensionPoint;
+import com.ewitulsk.villagersimulator.api.sim.social.Relationships;
 import com.ewitulsk.villagersimulator.api.sim.registry.RegistryKey;
 import com.ewitulsk.villagersimulator.api.sim.registry.SimRegistry;
 import com.ewitulsk.villagersimulator.api.sim.stat.Stats;
@@ -93,4 +95,10 @@ public interface SimContext {
     Logic logic();
 
     Stats stats();
+
+    /** The relationship graph. */
+    Relationships relationships();
+
+    /** Values registered for an extension point, in registration order. */
+    <T> List<T> extensions(ExtensionPoint<T> point);
 }

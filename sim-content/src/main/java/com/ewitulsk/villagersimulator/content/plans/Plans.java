@@ -40,6 +40,8 @@ public final class Plans {
     public static final IntField CURSOR_INDEX = CURSOR.intField("index");
     /** When the current entry actually started (later than planned if the villager joined mid-entry). */
     public static final LongField CURSOR_STARTED = CURSOR.longField("started");
+    /** Bumped every time an entry begins; the entry's end task carries it, so replaced entries' tasks go stale. */
+    public static final IntField CURSOR_SEQ = CURSOR.intField("seq");
 
     /** Where the villager was when the current entry began (doubles stored as raw bits). */
     public static final DenseComponent POSITION = new DenseComponent(VS.id("position"), 1);
@@ -60,9 +62,8 @@ public final class Plans {
     /** Starts a new villager's plan at the current time. */
     public static void start(SimContext ctx, EntityId v) {
         long now = ctx.now();
-        Plan plan = DailyPlanner.generate(ctx, v, SimTime.day(now));
-        ctx.set(v, PLAN, plan);
         ctx.add(v, CURSOR);
+        Plan plan = planDay(ctx, v, SimTime.day(now));
         int index = plan.indexAt(now);
         setPosition(ctx, v, plan.entries().get(index).target());
         begin(ctx, v, plan, index);
@@ -94,9 +95,31 @@ public final class Plans {
         ctx.set(v, POS_Z, Double.doubleToRawLongBits(p[2]));
     }
 
-    private static long key(long day, int index) {
-        return day * 10_000 + index;
+    /** Generates a day, lets contributors add to it, stores it and announces it. */
+    private static Plan planDay(SimContext ctx, EntityId v, long day) {
+        Plan plan = DailyPlanner.generate(ctx, v, day);
+        for (PlanHooks.PlanContributor c : ctx.extensions(PlanHooks.CONTRIBUTORS)) plan = c.contribute(ctx, v, plan);
+        ctx.set(v, PLAN, plan);
+        ctx.publish(new PlanHooks.DayPlanned(v, day));
+        return plan;
     }
+
+    /**
+     * Books {@code entry} into the plan if its whole span lies inside one free-time entry that hasn't started yet
+     * (or has started but covers the span). Returns the new plan, or empty if the time isn't free.
+     */
+    public static Optional<Plan> commit(Plan plan, PlanEntry entry, long now) {
+        List<PlanEntry> entries = plan.entries();
+        for (int i = 0; i < entries.size(); i++) {
+            PlanEntry e = entries.get(i);
+            if (!e.activity().equals(BasicActivities.FREE_TIME)) continue;
+            if (entry.start() < Math.max(e.start(), now) || entry.end() > e.end()) continue;
+            List<PlanEntry> with = List.of(e.withTimes(e.start(), entry.start()), entry, e.withTimes(entry.end(), e.end()));
+            return Optional.of(replace(plan, i, with));
+        }
+        return Optional.empty();
+    }
+
 
     private static Plan replace(Plan plan, int index, List<PlanEntry> with) {
         List<PlanEntry> entries = new ArrayList<>(plan.entries());
@@ -129,9 +152,13 @@ public final class Plans {
         ctx.set(v, PLAN, plan);
         ctx.set(v, CURSOR_INDEX, index);
         ctx.set(v, CURSOR_STARTED, now);
-        if (e.ad().isPresent() && !e.venue().isNone() && ctx.alive(e.venue())) Buildings.visited(ctx, e.venue());
+        int seq = ctx.get(v, CURSOR_SEQ) + 1;
+        ctx.set(v, CURSOR_SEQ, seq);
+        boolean atVenue = !e.venue().isNone() && ctx.alive(e.venue()) && !e.activity().equals(BasicActivities.TRAVEL);
+        if (e.ad().isPresent() && atVenue) Buildings.visited(ctx, e.venue());
         ctx.activity(e.activity()).begin(new ActivityContext(ctx, v, e.venue()));
-        ctx.schedule(Math.max(now, e.end()), ADVANCE, v, key(plan.day(), index));
+        if (atVenue) ctx.publish(new PlanHooks.VisitStarted(v, e.venue(), e.activity(), e.ad(), now, e.end()));
+        ctx.schedule(Math.max(now, e.end()), ADVANCE, v, seq);
     }
 
     /** Replaces a free-time entry: the best advertisement (or a short idle), then the remaining free time. */
@@ -158,22 +185,52 @@ public final class Plans {
         Plan plan = ctx.get(v, PLAN);
         if (plan == null) return;
         int index = ctx.get(v, CURSOR_INDEX);
-        if (key(plan.day(), index) != arg) return; // stale task from a replaced plan
+        if (ctx.get(v, CURSOR_SEQ) != arg) return; // stale task from a replaced entry
 
-        PlanEntry e = plan.entries().get(index);
+        finish(ctx, v, plan.entries().get(index));
+        if (index + 1 < plan.entries().size()) {
+            begin(ctx, v, plan, index + 1);
+        } else {
+            Plan next = planDay(ctx, v, plan.day() + 1);
+            begin(ctx, v, next, next.indexAt(ctx.now()));
+        }
+    }
+
+    /** Resolves the current entry up to now: its activity, its advertisement, the visit and the new position. */
+    private static void finish(SimContext ctx, EntityId v, PlanEntry e) {
         long started = ctx.get(v, CURSOR_STARTED);
         Activity activity = ctx.activity(e.activity());
         activity.simulateAbstract(new ActivityContext(ctx, v, e.venue()), started, ctx.now());
         if (e.ad().isPresent()) fulfil(ctx, v, e, started);
         setPosition(ctx, v, e.positionAt(ctx.now()));
-        checkStarving(ctx, v);
-
-        if (index + 1 < plan.entries().size()) {
-            begin(ctx, v, plan, index + 1);
-        } else {
-            Plan next = DailyPlanner.generate(ctx, v, plan.day() + 1);
-            begin(ctx, v, next, next.indexAt(ctx.now()));
+        if (!e.venue().isNone() && ctx.alive(e.venue()) && !e.activity().equals(BasicActivities.TRAVEL)) {
+            ctx.publish(new PlanHooks.VisitEnded(v, e.venue(), e.activity(), e.ad(), started, ctx.now()));
         }
+        checkStarving(ctx, v);
+    }
+
+    /**
+     * Stops whatever the villager is doing and starts {@code entry} now, e.g. for a player's invitation or a test.
+     * The current entry is resolved up to now; later entries that overlap {@code entry} are cut short or dropped.
+     */
+    public static void interrupt(SimContext ctx, EntityId v, PlanEntry entry) {
+        Plan plan = ctx.get(v, PLAN);
+        if (plan == null || !ctx.has(v, CURSOR)) return;
+        long now = ctx.now();
+        int index = ctx.get(v, CURSOR_INDEX);
+        PlanEntry current = plan.entries().get(index);
+        finish(ctx, v, current);
+
+        List<PlanEntry> out = new ArrayList<>(plan.entries().subList(0, index));
+        if (now > current.start()) out.add(current.withTimes(current.start(), now));
+        int at = out.size();
+        long end = Math.max(now + 1, entry.end());
+        out.add(entry.withTimes(now, end));
+        for (PlanEntry e : plan.entries().subList(index + 1, plan.entries().size())) {
+            if (e.end() <= end) continue;
+            out.add(e.start() < end ? e.withTimes(end, e.end()) : e);
+        }
+        begin(ctx, v, new Plan(plan.day(), out), at);
     }
 
     /** Applies a finished advertisement: goods consumed, need gains and effects, scaled by how much was completed. */

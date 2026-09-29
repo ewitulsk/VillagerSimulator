@@ -35,13 +35,17 @@ import com.ewitulsk.villagersimulator.api.sim.view.ViewProvider;
 import com.ewitulsk.villagersimulator.core.data.DataSource;
 import com.ewitulsk.villagersimulator.core.storage.DenseStore;
 import com.ewitulsk.villagersimulator.core.storage.EntityAllocator;
+import com.ewitulsk.villagersimulator.core.storage.RelationshipGraph;
 import com.ewitulsk.villagersimulator.core.storage.Scheduler;
+import com.ewitulsk.villagersimulator.api.sim.module.ExtensionPoint;
+import com.ewitulsk.villagersimulator.api.sim.social.Relationships;
 import com.ewitulsk.villagersimulator.core.storage.SparseStore;
 import com.mojang.serialization.JsonOps;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -72,6 +76,8 @@ public final class SimWorld implements SimContext {
     private final StatsImpl stats = new StatsImpl(this);
     private final List<Validator> validators = new ArrayList<>();
     private final List<String> problems = new ArrayList<>();
+    private final Map<Id, List<Object>> extensions = new LinkedHashMap<>();
+    final RelationshipGraph relationships = new RelationshipGraph(this::now, this::alive);
     private final Map<Class<?>, List<EventHandler<?>>> handlers = new HashMap<>();
     private final Map<ViewKey<?>, ViewProvider<?>> views = new LinkedHashMap<>();
     final EntityAllocator entities = new EntityAllocator();
@@ -271,6 +277,12 @@ public final class SimWorld implements SimContext {
         public void validator(Validator validator) {
             validators.add(validator);
         }
+
+        @Override
+        public <T> void extend(ExtensionPoint<T> point, T value) {
+            if (!point.type().isInstance(value)) throw new IllegalArgumentException(value + " is not a " + point.type().getName());
+            extensions.computeIfAbsent(point.id(), k -> new ArrayList<>()).add(value);
+        }
     }
 
     // ------------------------------------------------------------------------------------------------ driving
@@ -334,6 +346,7 @@ public final class SimWorld implements SimContext {
         int i = entity.index();
         for (DenseStore s : dense.values()) s.remove(i);
         for (SparseStore<?> s : sparse.values()) s.remove(i);
+        relationships.forget(entity);
         entities.free(entity);
     }
 
@@ -502,6 +515,17 @@ public final class SimWorld implements SimContext {
         return stats;
     }
 
+    @Override
+    public Relationships relationships() {
+        return relationships;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> List<T> extensions(ExtensionPoint<T> point) {
+        return (List<T>) Collections.unmodifiableList(extensions.getOrDefault(point.id(), List.of()));
+    }
+
     // ------------------------------------------------------------------------------------------------ state
 
     /**
@@ -537,6 +561,7 @@ public final class SimWorld implements SimContext {
             h.add(t.target());
             h.add(t.arg());
         }
+        relationships.hash(h::add);
         h.add(eventLog.size());
         return h.value;
     }

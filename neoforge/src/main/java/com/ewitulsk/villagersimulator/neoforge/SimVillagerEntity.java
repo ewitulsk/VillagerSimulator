@@ -68,9 +68,12 @@ public class SimVillagerEntity extends PathfinderMob {
         super.tick();
     }
 
-    /** Follows the embodiment: navigation, sleeping, name tag. */
+    /** Follows the embodiment: navigation, sleeping, conversation, name tag. */
     public void apply(Embodiment e) {
-        String label = e.name() + " · " + e.activityLabel();
+        SimServer sim = SimServer.get();
+        Embodiment partner = sim == null ? null : sim.bridge().partnerOf(handle);
+        SimVillagerEntity partnerPuppet = partner == null ? null : sim.bridge().puppet(partner.id());
+        String label = e.name() + " · " + (partner != null ? "Chatting with " + partner.name().split(" ")[0] : e.activityLabel());
         if (!label.equals(lastLabel)) {
             lastLabel = label;
             setCustomName(Component.literal(label));
@@ -103,6 +106,11 @@ public class SimVillagerEntity extends PathfinderMob {
             }
         } else if (!getNavigation().isDone()) {
             getNavigation().stop();
+        }
+        // Embodied conversation: face the partner and gesture now and then. The outcome is decided by the sim.
+        if (partnerPuppet != null && distanceToSqr(partnerPuppet) < 8 * 8 && getNavigation().isDone()) {
+            getLookControl().setLookAt(partnerPuppet, 30, 30);
+            if ((tickCount + handle) % 60 == 0) swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
         lastTx = e.tx();
         lastTy = e.ty();

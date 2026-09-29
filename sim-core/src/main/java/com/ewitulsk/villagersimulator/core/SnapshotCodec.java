@@ -35,6 +35,8 @@ final class SnapshotCodec {
     static final int FORMAT = 1;
     private static final byte DENSE = 1;
     private static final byte SPARSE = 2;
+    private static final byte GRAPH = 3;
+    private static final Id RELATIONSHIPS = Id.of("villagersimulator", "relationships");
 
     private SnapshotCodec() {}
 
@@ -60,6 +62,11 @@ final class SnapshotCodec {
             List<byte[]> sections = new ArrayList<>();
             for (DenseStore s : w.dense.values()) sections.add(section(s.component().id(), DENSE, writeDense(s)));
             for (SparseStore<?> s : w.sparse.values()) sections.add(section(s.component().id(), SPARSE, writeSparse(s)));
+            ByteArrayOutputStream graph = new ByteArrayOutputStream();
+            DataOutputStream g = new DataOutputStream(graph);
+            w.relationships.write(g);
+            g.flush();
+            sections.add(section(RELATIONSHIPS, GRAPH, graph.toByteArray()));
             sections.addAll(w.unknownSections.values());
             out.writeInt(sections.size());
             for (byte[] s : sections) out.write(s);
@@ -110,6 +117,7 @@ final class SnapshotCodec {
                 DataInputStream p = new DataInputStream(new ByteArrayInputStream(payload));
                 if (kind == DENSE && w.dense.containsKey(id)) readDense(w.dense.get(id), p);
                 else if (kind == SPARSE && w.sparse.containsKey(id)) readSparse(w.sparse.get(id), p);
+                else if (kind == GRAPH && id.equals(RELATIONSHIPS)) w.relationships.read(p);
                 else {
                     LOG.warn("Keeping unknown save section {} (no registered component claims it)", id);
                     w.unknownSections.put(id, section(id, kind, payload));

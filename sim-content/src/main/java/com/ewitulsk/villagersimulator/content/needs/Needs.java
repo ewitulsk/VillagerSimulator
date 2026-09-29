@@ -31,8 +31,11 @@ public final class Needs {
     public static final Need HYGIENE = new Need(new DenseComponent(VS.id("hygiene"), 1));
     public static final Need COMFORT = new Need(new DenseComponent(VS.id("comfort"), 1));
 
-    /** A need with its per-tick rates awake and asleep. */
-    public record NeedType(String name, Need need, float awake, float asleep) {
+    /**
+     * A need with its per-tick rates awake and asleep, and its priority: how much it counts when choosing what to do.
+     * Bodily needs come first (Maslow): a hungry villager eats before they socialise.
+     */
+    public record NeedType(String name, Need need, float awake, float asleep, float priority) {
         public com.ewitulsk.villagersimulator.api.sim.Id decayStat() {
             return VS.id(name + "_decay");
         }
@@ -43,12 +46,12 @@ public final class Needs {
     }
 
     public static final List<NeedType> ALL = List.of(
-            new NeedType("hunger", HUNGER, -per(12 * H), -per(36 * H)),
-            new NeedType("energy", ENERGY, -per(16 * H), per(8 * H)),
-            new NeedType("social", SOCIAL, -per(16 * H), -per(48 * H)),
-            new NeedType("fun", FUN, -per(14 * H), -per(48 * H)),
-            new NeedType("hygiene", HYGIENE, -per(24 * H), -per(72 * H)),
-            new NeedType("comfort", COMFORT, -per(12 * H), per(10 * H)));
+            new NeedType("hunger", HUNGER, -per(12 * H), -per(36 * H), 2.0f),
+            new NeedType("energy", ENERGY, -per(16 * H), per(8 * H), 1.5f),
+            new NeedType("social", SOCIAL, -per(16 * H), -per(48 * H), 1.0f),
+            new NeedType("fun", FUN, -per(14 * H), -per(48 * H), 0.8f),
+            new NeedType("hygiene", HYGIENE, -per(24 * H), -per(72 * H), 0.8f),
+            new NeedType("comfort", COMFORT, -per(12 * H), per(10 * H), 0.7f));
 
     private static final Map<String, NeedType> BY_NAME = ALL.stream().collect(Collectors.toMap(NeedType::name, Function.identity()));
 

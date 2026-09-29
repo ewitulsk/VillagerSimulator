@@ -36,7 +36,7 @@ public final class BridgeGameTests {
     private BridgeGameTests() {}
 
     /** Promote → demote → promote leaves exactly one entity for the villager, never two. */
-    @GameTest(template = "empty", batch = BATCH, timeoutTicks = 300)
+    @GameTest(template = "empty", batch = BATCH, timeoutTicks = 1200)
     public static void promoteDemotePromoteKeepsOnePuppet(GameTestHelper h) {
         AtomicReference<EntityId> villager = new AtomicReference<>();
         TestSupport.spawn(TestSupport.compactVillage(h, "Bridgeton", 11, 1, null), null)

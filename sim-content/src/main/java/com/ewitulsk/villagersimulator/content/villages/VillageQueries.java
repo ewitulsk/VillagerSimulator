@@ -7,6 +7,7 @@ import com.ewitulsk.villagersimulator.api.sim.SimTime;
 import com.ewitulsk.villagersimulator.api.sim.command.SimQuery;
 import com.ewitulsk.villagersimulator.api.sim.core.CoreComponents;
 import com.ewitulsk.villagersimulator.api.sim.event.EventRecord;
+import com.ewitulsk.villagersimulator.api.sim.module.ExtensionPoint;
 import com.ewitulsk.villagersimulator.content.buildings.Building;
 import com.ewitulsk.villagersimulator.content.buildings.BuildingType;
 import com.ewitulsk.villagersimulator.content.buildings.Buildings;
@@ -21,6 +22,15 @@ import java.util.Optional;
 
 /** Read-only queries used by commands, UI and tests. */
 public final class VillageQueries {
+    /** Adds lines to {@code /vs inspect} for a villager. */
+    @FunctionalInterface
+    public interface InspectContributor {
+        List<String> describe(SimContext ctx, EntityId villager);
+    }
+
+    public static final ExtensionPoint<InspectContributor> INSPECT =
+            new ExtensionPoint<>(com.ewitulsk.villagersimulator.content.VS.id("inspect"), InspectContributor.class);
+
     private VillageQueries() {}
 
     /** Human-readable state of a villager for {@code /vs inspect}. */
@@ -48,6 +58,7 @@ public final class VillageQueries {
                     out.add("  then " + ctx.activity(e.activity()).label() + " at " + SimTime.describe(e.start()));
                 }
             }
+            for (InspectContributor c : ctx.extensions(INSPECT)) out.addAll(c.describe(ctx, villager));
             List<EventRecord> events = ctx.events().byActor(villager);
             for (int k = Math.max(0, events.size() - 3); k < events.size(); k++) {
                 EventRecord r = events.get(k);
