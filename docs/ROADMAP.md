@@ -67,14 +67,21 @@ Phases are ordered: each phase builds on **every earlier phase in its milestone*
 - **Buildings in the world:** anchor block + 3 blueprints (house, bakery, well) as `.nbt` + metadata JSON, **built with Structure Lab**.
 - **`/vs village spawn`** places the blueprints and creates the villagers.
 - **Persistence:** SQLite `sim.db` with a simple snapshot on world save.
-- **Debug:** `/vs inspect <villager>` (needs, plan, current Activity); `/vs time warp`; a name tag showing the current Activity.
+- **Debug:** `/vs inspect <villager>` (needs, plan, current Activity); a name tag showing the current Activity.
+- **Time control** (built now, extended in later phases as needed):
+  - **Virtual clock in the headless harness:** scenarios run as fast as the CPU allows, with no wall-clock link, so "5 sim-days" takes milliseconds.
+  - **Sim warp:** `/vs time warp <duration>` races the sim ahead while Minecraft stays on the same tick. Exposed to GameTests, so abstract (T2) behaviour over days is checked in a few ticks.
+  - **Tick sprint helper for GameTests:** wraps Minecraft's `/tick sprint` for the rare embodied test that needs many real ticks (each use needs a written reason, per ModTesting).
+  - **`sim.debugTimeScale`** dev config: speeds up the day and life clocks relative to game ticks for manual playtesting (e.g. a whole lifetime in 10 minutes).
+  - **Dev hot-swap:** JetBrains Runtime with enhanced class redefinition in the dev run configs, so code changes apply without restarting the game.
 
 **Playable:** spawn a hamlet, watch villagers wake up, walk to the bakery, work, eat and go home to sleep. Walk 500 blocks away, come back hours later, and find them where their schedule says. Quit and reload the world; everything is where it was.
 
 **Done when**
 - JUnit: scheduler ordering, component storage, save/load round trip.
-- Scenario (headless): 5 sim-days, nobody starves, the bakery produces bread.
+- Scenario (headless, virtual time, under a second): 5 sim-days, nobody starves, the bakery produces bread.
 - GameTest: promote → demote → promote leaves exactly one entity per villager; puppets are never written to chunk data.
+- GameTest: a village at T2 is warped 1 sim-day within a few ticks, and its state matches the headless scenario for the same seed.
 
 ---
 
