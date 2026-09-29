@@ -227,7 +227,8 @@ public final class Plans {
         long end = Math.max(now + 1, entry.end());
         out.add(entry.withTimes(now, end));
         for (PlanEntry e : plan.entries().subList(index + 1, plan.entries().size())) {
-            if (e.end() <= end) continue;
+            // Planned walks started from somewhere else; begin() inserts a fresh walk from wherever the villager is.
+            if (e.end() <= end || e.activity().equals(BasicActivities.TRAVEL)) continue;
             out.add(e.start() < end ? e.withTimes(end, e.end()) : e);
         }
         begin(ctx, v, new Plan(plan.day(), out), at);

@@ -58,6 +58,7 @@ public final class SimBridge {
         if (tickCount % TIER_INTERVAL == 0) updateTiers(level);
         if (tickCount % RECONCILE_INTERVAL == 0) reconcile(level);
         if (tickCount % SWEEP_INTERVAL == 0) sweepOrphans(level);
+        if (tickCount % TIER_INTERVAL == 0 && SimServer.get() != null) SimPlayers.reportPositions(SimServer.get());
     }
 
     /**

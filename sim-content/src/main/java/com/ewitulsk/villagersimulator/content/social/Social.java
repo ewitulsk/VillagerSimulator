@@ -166,7 +166,11 @@ public final class Social {
         }
         if (colleagues) rel.setBond(a, b, Bonds.COLLEAGUE, true);
         updateBonds(ctx, a, b);
+        ctx.publish(new Interacted(a, b, overlap));
     }
+
+    /** Two entities just spent time together (published after the relationship changed), e.g. for gossip. */
+    public record Interacted(EntityId a, EntityId b, long overlap) implements com.ewitulsk.villagersimulator.api.sim.event.SimEvent {}
 
     static long seed(SimContext ctx, EntityId v) {
         var villager = ctx.get(v, com.ewitulsk.villagersimulator.content.villages.Villages.VILLAGER);

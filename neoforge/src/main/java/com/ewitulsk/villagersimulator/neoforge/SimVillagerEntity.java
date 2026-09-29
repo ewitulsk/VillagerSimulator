@@ -117,6 +117,15 @@ public class SimVillagerEntity extends PathfinderMob {
         lastTz = e.tz();
     }
 
+    /** Right-click: talk, or give the held item as a gift. */
+    @Override
+    protected net.minecraft.world.InteractionResult mobInteract(net.minecraft.world.entity.player.Player player,
+                                                               net.minecraft.world.InteractionHand hand) {
+        if (hand != net.minecraft.world.InteractionHand.MAIN_HAND) return net.minecraft.world.InteractionResult.PASS;
+        if (!level().isClientSide) com.ewitulsk.villagersimulator.neoforge.server.SimPlayers.interact(this, player, hand);
+        return net.minecraft.world.InteractionResult.sidedSuccess(level().isClientSide);
+    }
+
     @Override
     public void remove(RemovalReason reason) {
         // Free the bed so players can still use it.

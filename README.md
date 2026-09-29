@@ -4,7 +4,7 @@ A NeoForge 1.21.1 mod: a village simulation engine aiming at a million villagers
 
 - [docs/DESIGN.md](docs/DESIGN.md): what the game is
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it's built
-- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships).**
+- [docs/ROADMAP.md](docs/ROADMAP.md): the phases. **Implemented: Phase 0 (A Living Hamlet), Phase 1 (Smart Objects & Choices), Phase 2 (Venues & Relationships), Phase 3 (The Player Joins the Village).**
 
 ## Project layout
 
@@ -63,6 +63,8 @@ In a creative overworld (cheats on):
 **Villagers choose what to do.** Outside sleep and work, villagers pick from what buildings advertise: the bakery (eat), tavern (drink), well (gather, wash), market stall (browse) and their home (rest, nap), scored by their six needs (hunger, energy, social, fun, hygiene, comfort). Building types and their advertisements are datapack JSON (`data/<ns>/villagersimulator/building_types/`); `/reload` applies changes to the running sim. Beds and vanilla workstation blocks in a blueprint become points automatically.
 
 **Villagers know each other.** Whenever villagers spend time at the same place (chatting at the well, drinking at the tavern, working the same shift), their friendship changes, shaped by kindness, temper and sociability. Friends and rivals form, colleagues bond, arguments leave memories that fade over a day or two. Close friends arrange to meet at the tavern the next evening; rivals avoid places the other is at. Embodied villagers face whoever they're talking to. `/vs inspect` shows personality, mood, relationships, memories and appointments.
+
+**You're part of it too.** Right-click a villager to talk: chat, compliment, joke, ask about their day, or invite them to the tavern (once they know you). Use an item on a villager to give it as a gift; what it's worth depends on the item (`gift_values` data) and the villager's taste. Spending time in the tavern or at the well with villagers builds relationships the same way it does between villagers, and villagers gossip about you, so your reputation spreads to people you've never met. `/vs reputation` shows where you stand.
 
 Walk more than 48 blocks away and the villagers become abstract (T2) while their days carry on. Come back and they're where their schedule says. The sim is saved in `<world>/villagersimulator/sim.db`.
 

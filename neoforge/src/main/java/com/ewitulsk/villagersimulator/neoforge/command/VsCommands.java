@@ -70,6 +70,7 @@ public final class VsCommands {
                 .then(Commands.literal("expr").then(Commands.literal("eval").then(
                         Commands.argument("expression", StringArgumentType.greedyString()).executes(VsCommands::evalExpression))))
                 .then(Commands.literal("problems").executes(VsCommands::problems))
+                .then(Commands.literal("reputation").executes(VsCommands::reputation))
                 .then(Commands.literal("save").executes(VsCommands::save)));
     }
 
@@ -173,6 +174,15 @@ public final class VsCommands {
                 return List.of("Error" + (ex.position() >= 0 ? " at column " + (ex.position() + 1) : "") + ": " + ex.getMessage());
             }
         }));
+    }
+
+    /** Your reputation in each village: how residents feel about you on average, and how many have heard of you. */
+    private static int reputation(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
+        SimServer sim = sim();
+        net.minecraft.server.level.ServerPlayer player = c.getSource().getPlayerOrException();
+        com.ewitulsk.villagersimulator.neoforge.server.SimPlayers.handle(sim, player).thenAccept(me ->
+                reply(c, sim.runtime().query(com.ewitulsk.villagersimulator.content.players.PlayerCommands.reputation(me))));
+        return 1;
     }
 
     private static int problems(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {

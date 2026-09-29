@@ -5,6 +5,14 @@ import com.ewitulsk.villagersimulator.neoforge.client.ClientSetup;
 import com.ewitulsk.villagersimulator.neoforge.command.VsCommands;
 import com.ewitulsk.villagersimulator.neoforge.server.SimDataReloadListener;
 import com.ewitulsk.villagersimulator.neoforge.server.SimServer;
+import com.ewitulsk.villagersimulator.neoforge.server.SimPlayers;
+import com.ewitulsk.villagersimulator.neoforge.client.ClientHandlers;
+import com.ewitulsk.villagersimulator.neoforge.net.DialogueChoicePayload;
+import com.ewitulsk.villagersimulator.neoforge.net.DialoguePayload;
+import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -38,6 +46,11 @@ public final class VillagerSimulatorMod {
         // Our own content registers exactly like an addon would (docs/ARCHITECTURE.md §3, "dogfood the API").
         modBus.addListener(RegisterSimModulesEvent.class, e -> ContentModules.all().forEach(e::register));
         if (FMLEnvironment.dist == Dist.CLIENT) ClientSetup.init(modBus);
+        modBus.addListener(RegisterPayloadHandlersEvent.class, e -> {
+            PayloadRegistrar registrar = e.registrar("1");
+            registrar.playToClient(DialoguePayload.TYPE, DialoguePayload.CODEC, (payload, ctx) -> ClientHandlers.dialogue(payload));
+            registrar.playToServer(DialogueChoicePayload.TYPE, DialogueChoicePayload.CODEC, SimPlayers::onChoice);
+        });
 
         NeoForge.EVENT_BUS.addListener(AddReloadListenerEvent.class, e -> e.addListener(new SimDataReloadListener()));
         NeoForge.EVENT_BUS.addListener(RegisterCommandsEvent.class, e -> VsCommands.register(e.getDispatcher()));
@@ -45,6 +58,9 @@ public final class VillagerSimulatorMod {
         NeoForge.EVENT_BUS.addListener(ServerTickEvent.Post.class, e -> SimServer.tick(e.getServer()));
         NeoForge.EVENT_BUS.addListener(LevelEvent.Save.class, SimServer::onLevelSave);
         NeoForge.EVENT_BUS.addListener(ServerStoppingEvent.class, e -> SimServer.stop());
+        NeoForge.EVENT_BUS.addListener(PlayerEvent.PlayerLoggedInEvent.class, e -> {
+            if (e.getEntity() instanceof ServerPlayer p) SimPlayers.onLogin(p);
+        });
     }
 
     public static ResourceLocation id(String path) {
